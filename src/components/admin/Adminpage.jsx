@@ -76,54 +76,138 @@ export function AdminOverview() {
 /* ── Admin Students ───────────────────────────────────────────────────────── */
 export function AdminStudents() {
   const [q, setQ] = useState("");
+  const [semesterFilter, setSemesterFilter] = useState("");
+  const [branchFilter, setBranchFilter] = useState("");
   const [students, setStudents] = useState([]);
+  const [selectedStudent, setSelectedStudent] = useState(null);
 
   useEffect(() => {
-    fetch("http://localhost:5001/students")
+    fetch("http://localhost:5001/students", {
+      headers: { "Authorization": `Bearer ${localStorage.getItem("token")}` }
+    })
       .then(r => r.json())
-      .then(d => setStudents(d))
+      .then(d => { if (Array.isArray(d)) setStudents(d); })
       .catch(() => {});
   }, []);
 
-  const list = students.filter(s =>
-    s.name?.toLowerCase().includes(q.toLowerCase()) || s._id?.includes(q)
-  );
+  const list = students.filter(s => {
+    const matchQ = s.name?.toLowerCase().includes(q.toLowerCase()) || s.rollNo?.toLowerCase().includes(q.toLowerCase()) || s._id?.includes(q);
+    const matchSem = semesterFilter ? s.semester === semesterFilter : true;
+    const matchBranch = branchFilter ? s.branch === branchFilter : true;
+    return matchQ && matchSem && matchBranch;
+  });
 
   return (
     <div>
+      {selectedStudent && (
+        <div style={{ position:"fixed", top:0, left:0, right:0, bottom:0, background:"rgba(0,0,0,0.5)", zIndex:1000, display:"flex", alignItems:"center", justifyContent:"center" }}>
+          <Card style={{ width:"90%", maxWidth:600, maxHeight:"90vh", overflowY:"auto" }}>
+            <div style={{ display:"flex", justifyContent:"space-between", marginBottom:20 }}>
+              <div style={{ fontSize:18, fontWeight:800, color:"#1A1540" }}>Student Details</div>
+              <Button variant="ghost" size="sm" onClick={() => setSelectedStudent(null)}>✕ Close</Button>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <div style={{ fontSize:14, color:"#7B789E", marginBottom:2 }}>Name</div>
+                <div style={{ fontSize:16, fontWeight:700, color:"#1A1540" }}>{selectedStudent.name}</div>
+              </div>
+              <div>
+                <div style={{ fontSize:14, color:"#7B789E", marginBottom:2 }}>Roll No</div>
+                <div style={{ fontSize:16, fontWeight:700, color:"#1A1540" }}>{selectedStudent.rollNo || "N/A"}</div>
+              </div>
+              <div>
+                <div style={{ fontSize:14, color:"#7B789E", marginBottom:2 }}>Branch</div>
+                <div style={{ fontSize:16, fontWeight:700, color:"#1A1540" }}>{selectedStudent.branch || "N/A"}</div>
+              </div>
+              <div>
+                <div style={{ fontSize:14, color:"#7B789E", marginBottom:2 }}>Semester</div>
+                <div style={{ fontSize:16, fontWeight:700, color:"#1A1540" }}>{selectedStudent.semester || "N/A"}</div>
+              </div>
+              <div>
+                <div style={{ fontSize:14, color:"#7B789E", marginBottom:2 }}>Email</div>
+                <div style={{ fontSize:16, fontWeight:700, color:"#1A1540" }}>{selectedStudent.email || "N/A"}</div>
+              </div>
+              <div>
+                <div style={{ fontSize:14, color:"#7B789E", marginBottom:2 }}>Phone</div>
+                <div style={{ fontSize:16, fontWeight:700, color:"#1A1540" }}>{selectedStudent.phone || "N/A"}</div>
+              </div>
+              <div>
+                <div style={{ fontSize:14, color:"#7B789E", marginBottom:2 }}>DOB</div>
+                <div style={{ fontSize:16, fontWeight:700, color:"#1A1540" }}>{selectedStudent.dob || "N/A"}</div>
+              </div>
+              <div>
+                <div style={{ fontSize:14, color:"#7B789E", marginBottom:2 }}>Address</div>
+                <div style={{ fontSize:16, fontWeight:700, color:"#1A1540" }}>{selectedStudent.address || "N/A"}</div>
+              </div>
+              <div>
+                <div style={{ fontSize:14, color:"#7B789E", marginBottom:2 }}>Attendance</div>
+                <div style={{ fontSize:16, fontWeight:700, color:"#10C98F" }}>{selectedStudent.attendance || 0}%</div>
+              </div>
+              <div>
+                <div style={{ fontSize:14, color:"#7B789E", marginBottom:2 }}>GPA</div>
+                <div style={{ fontSize:16, fontWeight:700, color:"#4F38C2" }}>{selectedStudent.gpa || 0}</div>
+              </div>
+            </div>
+          </Card>
+        </div>
+      )}
+
       <AddStudentForm />
       <SectionHeader
         title="Student Management"
         sub={`${students.length} students enrolled`}
-        action={<Button variant="primary" size="sm">+ Enroll Student</Button>}
       />
       <Card>
-        <div className="flex gap-2.5 mb-4">
+        <div className="flex gap-2.5 mb-4 items-center flex-wrap">
           <input value={q} onChange={e => setQ(e.target.value)} placeholder="🔍  Search by name or roll number..."
-            className="flex-1 px-3.5 py-2.5 border-[1.5px] border-[#E8E6F5] rounded-[10px] text-[13.5px] outline-none focus:border-[#6C4EF5] transition-colors" />
-          <Button variant="ghost" size="sm">Filter ▾</Button>
+            className="flex-1 px-3.5 py-2.5 border-[1.5px] border-[#E8E6F5] rounded-[10px] text-[13.5px] outline-none focus:border-[#6C4EF5] transition-colors min-w-[200px]" />
+          
+          <select value={semesterFilter} onChange={e => setSemesterFilter(e.target.value)} className="px-3 py-2.5 border-[1.5px] border-[#E8E6F5] rounded-[10px] text-[13.5px] outline-none focus:border-[#6C4EF5]">
+            <option value="">All Semesters</option>
+            <option value="1st">1st Semester</option>
+            <option value="2nd">2nd Semester</option>
+            <option value="3rd">3rd Semester</option>
+            <option value="4th">4th Semester</option>
+            <option value="5th">5th Semester</option>
+            <option value="6th">6th Semester</option>
+            <option value="7th">7th Semester</option>
+            <option value="8th">8th Semester</option>
+          </select>
+
+          <select value={branchFilter} onChange={e => setBranchFilter(e.target.value)} className="px-3 py-2.5 border-[1.5px] border-[#E8E6F5] rounded-[10px] text-[13.5px] outline-none focus:border-[#6C4EF5]">
+            <option value="">All Branches</option>
+            <option value="CSE-AI">CSE-AI</option>
+            <option value="CSE">CSE</option>
+            <option value="IT">IT</option>
+            <option value="ECE">ECE</option>
+            <option value="EEE">EEE</option>
+          </select>
+
           <Button variant="ghost" size="sm">Export CSV</Button>
         </div>
         <table className="w-full border-collapse">
-          <TableHead cols={["Roll No","Name","Class","Sem","Attendance","GPA","Status","Action"]} />
+          <TableHead cols={["Roll No","Name","Branch","Sem","Attendance","GPA","Status","Action"]} />
           <tbody>
             {list.map(s => (
               <tr key={s._id} className="border-b border-[#E8E6F5]">
-                <td className="px-3.5 py-3 font-bold text-[12.5px] text-[#7B789E]">{s._id?.slice(-5)}</td>
+                <td className="px-3.5 py-3 font-bold text-[12.5px] text-[#7B789E]">{s.rollNo || s._id?.slice(-5)}</td>
                 <td className="px-3.5 py-3">
                   <div className="flex items-center gap-2.5">
                     <Avatar name={s.name} size="sm" />
                     <span className="font-bold text-[13.5px] text-[#1A1540]">{s.name}</span>
                   </div>
                 </td>
-                <td className="px-3.5 py-3 text-[13px]">{s.class}</td>
+                <td className="px-3.5 py-3 text-[13px]">{s.branch || s.class || "N/A"}</td>
                 <td className="px-3.5 py-3 text-[13px]">{s.semester}</td>
                 <td className="px-3.5 py-3 text-[13px]">{s.attendance}%</td>
                 <td className="px-3.5 py-3 font-bold text-[13px]">{s.gpa}</td>
                 <td className="px-3.5 py-3"><Tag color="mint">Active</Tag></td>
-                <td className="px-3.5 py-3"><Button variant="ghost" size="sm">View →</Button></td>
+                <td className="px-3.5 py-3"><Button variant="ghost" size="sm" onClick={() => setSelectedStudent(s)}>View →</Button></td>
               </tr>
             ))}
+            {list.length === 0 && (
+              <tr><td colSpan="8" className="px-3.5 py-8 text-center text-[#7B789E]">No students found.</td></tr>
+            )}
           </tbody>
         </table>
       </Card>
@@ -132,35 +216,44 @@ export function AdminStudents() {
 }
 
 function AddStudentForm() {
-  const [student, setStudent] = useState({ name:"", class:"", semester:"", attendance:"", gpa:"" });
+  const [show, setShow] = useState(false);
+  const [student, setStudent] = useState({ name:"", class:"", semester:"", attendance:"", gpa:"", rollNo:"", email:"", phone:"", address:"", dob:"", branch:"" });
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
       await fetch("http://localhost:5001/students", {
         method:"POST",
-        headers:{"Content-Type":"application/json"},
+        headers:{ "Content-Type":"application/json", "Authorization": `Bearer ${localStorage.getItem("token")}` },
         body: JSON.stringify(student)
       });
       alert("Student Added Successfully");
       window.location.reload();
-      setStudent({ name:"", class:"", semester:"", attendance:"", gpa:"" });
+      setStudent({ name:"", class:"", semester:"", attendance:"", gpa:"", rollNo:"", email:"", phone:"", address:"", dob:"", branch:"" });
+      setShow(false);
     } catch (err) { console.error(err); }
   };
 
   return (
-    <Card className="mb-5">
-      <SectionHeader title="➕ Add Student" />
-      <form onSubmit={handleSubmit}>
-        <div className="grid grid-cols-2 gap-3">
-          <Input label="Student Name" value={student.name} onChange={v => setStudent({...student, name:v})} />
-          <Input label="Class" value={student.class} onChange={v => setStudent({...student, class:v})} />
-          <Input label="Semester" value={student.semester} onChange={v => setStudent({...student, semester:v})} />
-          <Input label="Attendance" value={student.attendance} onChange={v => setStudent({...student, attendance:v})} />
-        </div>
-        <Input label="GPA" value={student.gpa} onChange={v => setStudent({...student, gpa:v})} />
-        <Button type="submit" variant="primary" size="md">Add Student</Button>
-      </form>
+    <Card className="mb-5 border-l-4 border-l-[#6C4EF5]">
+      <SectionHeader title="➕ Add Student" action={<Button variant="ghost" size="sm" onClick={() => setShow(!show)}>{show ? "Cancel" : "Expand Form"}</Button>} />
+      {show && (
+        <form onSubmit={handleSubmit}>
+          <div className="grid grid-cols-2 gap-3 mb-3">
+            <Input label="Student Name" value={student.name} onChange={v => setStudent({...student, name:v})} />
+            <Input label="Roll No" value={student.rollNo} onChange={v => setStudent({...student, rollNo:v})} />
+            <Input label="Branch" value={student.branch} onChange={v => setStudent({...student, branch:v})} />
+            <Input label="Semester" value={student.semester} onChange={v => setStudent({...student, semester:v})} />
+            <Input label="Email" value={student.email} onChange={v => setStudent({...student, email:v})} />
+            <Input label="Phone" value={student.phone} onChange={v => setStudent({...student, phone:v})} />
+            <Input label="DOB" type="date" value={student.dob} onChange={v => setStudent({...student, dob:v})} />
+            <Input label="Address" value={student.address} onChange={v => setStudent({...student, address:v})} />
+            <Input label="Initial Attendance (%)" type="number" value={student.attendance} onChange={v => setStudent({...student, attendance:v})} />
+            <Input label="Initial GPA" type="number" value={student.gpa} onChange={v => setStudent({...student, gpa:v})} />
+          </div>
+          <Button type="submit" variant="primary" size="md">Save Student</Button>
+        </form>
+      )}
     </Card>
   );
 }

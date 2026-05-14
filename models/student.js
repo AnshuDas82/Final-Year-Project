@@ -13,6 +13,14 @@ const studentSchema = new mongoose.Schema({
   semester:   { type: String },
   attendance: { type: Number, default: 0 },
   gpa:        { type: Number, default: 0 },
+  rollNo:     { type: String },
+  registrationNumber: { type: String },
+  batch:      { type: String },
+  email:      { type: String },
+  phone:      { type: String },
+  address:    { type: String },
+  dob:        { type: String },
+  branch:     { type: String },
 
   // Which admin's institution this student belongs to
   adminId: {

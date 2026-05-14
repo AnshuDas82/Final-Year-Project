@@ -15,7 +15,7 @@ const app = express()
 app.use(cors())
 app.use(express.json())
 
-mongoose.connect("mongodb://127.0.0.1:27017/smartedupro")
+mongoose.connect("mongodb+srv://kranshu983_db_user:Glitch%40829@cluster0.qcjaijg.mongodb.net/smartedupro?appName=Cluster0")
   .then(() => console.log("MongoDB Connected"))
   .catch(err => console.log(err))
 

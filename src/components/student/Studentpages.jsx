@@ -57,6 +57,23 @@ export function StudentOverview({ user }) {
 
 /* ── Student Profile ──────────────────────────────────────────────────────── */
 export function StudentProfile({ user }) {
+  const [student, setStudent] = useState(null);
+
+  useEffect(() => {
+    fetch("http://localhost:5001/students", {
+      headers: { "Authorization": `Bearer ${localStorage.getItem("token")}` }
+    })
+      .then(res => res.json())
+      .then(data => {
+        if (Array.isArray(data) && data.length > 0) {
+          setStudent(data[0]);
+        }
+      })
+      .catch(console.error);
+  }, []);
+
+  const profileUser = student || user;
+
   return (
     <div>
       <SectionHeader title="👤 My Profile" />
@@ -64,25 +81,25 @@ export function StudentProfile({ user }) {
         <div>
           <Card className="text-center !px-6 !py-8">
             <div className="w-[90px] h-[90px] gr-violet rounded-full flex items-center justify-center text-[36px] font-extrabold text-white mx-auto mb-3.5">
-              {user.name.split(" ").map(w=>w[0]).join("").slice(0,2).toUpperCase()}
+              {(profileUser.name || "Student").split(" ").map(w=>w[0]).join("").slice(0,2).toUpperCase()}
             </div>
-            <div className="text-[19px] font-extrabold text-[#1A1540]">{user.name}</div>
-            <div className="text-[13.5px] text-[#7B789E] my-1">Roll No: {user.rollNo||"22510"}</div>
-            <Tag color="violet">B.Tech CSE-AI · {user.semester||"7th"} Semester</Tag>
+            <div className="text-[19px] font-extrabold text-[#1A1540]">{profileUser.name}</div>
+            <div className="text-[13.5px] text-[#7B789E] my-1">Roll No: {profileUser.rollNo || "N/A"}</div>
+            <Tag color="violet">{profileUser.branch || "B.Tech CSE-AI"} · {profileUser.semester || "1st"} Semester</Tag>
             <div className="grid grid-cols-2 gap-2.5 mt-4.5">
               <div className="bg-[#F4F3FF] rounded-[10px] p-3">
-                <div className="text-[20px] font-extrabold text-[#4F38C2]">8.7</div>
+                <div className="text-[20px] font-extrabold text-[#4F38C2]">{profileUser.gpa || "N/A"}</div>
                 <div className="text-[11px] text-[#7B789E]">Current GPA</div>
               </div>
               <div className="bg-[#F4F3FF] rounded-[10px] p-3">
-                <div className="text-[20px] font-extrabold text-[#10C98F]">92%</div>
+                <div className="text-[20px] font-extrabold text-[#10C98F]">{profileUser.attendance || 0}%</div>
                 <div className="text-[11px] text-[#7B789E]">Attendance</div>
               </div>
             </div>
           </Card>
           <Card className="mt-3.5">
             <div className="text-[14px] font-extrabold text-[#1A1540] mb-3.5">Contact Info</div>
-            {[["📧 Email","anshu.22510@mce.edu"],["📱 Phone","+91 9876543210"],["🏠 Address","Katihar, Bihar"],["🎂 DOB","15 March 2003"]].map(([l,v]) => (
+            {[["📧 Email", profileUser.email || "N/A"], ["📱 Phone", profileUser.phone || "N/A"], ["🏠 Address", profileUser.address || "N/A"], ["🎂 DOB", profileUser.dob || "N/A"]].map(([l,v]) => (
               <div key={l} className="flex justify-between py-2 border-b border-[#E8E6F5] text-[13px]">
                 <span className="text-[#7B789E]">{l}</span><span className="font-semibold text-[#1A1540]">{v}</span>
               </div>
@@ -102,7 +119,7 @@ export function StudentProfile({ user }) {
           <Card>
             <div className="text-[15px] font-extrabold text-[#1A1540] mb-4">Academic Details</div>
             <div className="grid grid-cols-2 gap-2.5">
-              {[["Program","B.Tech CSE-AI"],["University","AKTU, Lucknow"],["Batch","2022–2026"],["Semester","7th (Current)"],["Section","A"],["Mentor","Prof. Juhi Kumari"]].map(([l,v]) => (
+              {[["Program", profileUser.branch || "B.Tech CSE-AI"], ["Class", profileUser.class || "N/A"], ["Semester", profileUser.semester || "1st"], ["Roll No", profileUser.rollNo || "N/A"]].map(([l,v]) => (
                 <div key={l} className="bg-[#F4F3FF] rounded-[10px] p-3">
                   <div className="text-[11.5px] text-[#7B789E] mb-0.5">{l}</div>
                   <div className="text-[14px] font-bold text-[#1A1540]">{v}</div>

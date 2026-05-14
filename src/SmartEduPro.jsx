@@ -872,6 +872,23 @@ function Leaderboard() {
    STUDENT PROFILE
 ══════════════════════════════════════════════════════ */
 function StudentProfile({ user }) {
+  const [student, setStudent] = useState(null);
+
+  useEffect(() => {
+    fetch("http://localhost:5001/students", {
+      headers: { "Authorization": `Bearer ${localStorage.getItem("token")}` }
+    })
+      .then(res => res.json())
+      .then(data => {
+        if (Array.isArray(data) && data.length > 0) {
+          setStudent(data[0]);
+        }
+      })
+      .catch(console.error);
+  }, []);
+
+  const profileUser = student || user;
+
   return (
     <div>
       <SecHead title="👤 My Profile" />
@@ -879,27 +896,27 @@ function StudentProfile({ user }) {
         <div>
           <Card style={{ textAlign:"center", padding:"30px 24px" }}>
             <div style={{ width:90, height:90, borderRadius:"50%", background:GR.violet, display:"flex", alignItems:"center", justifyContent:"center", fontSize:36, fontWeight:800, color:"#fff", margin:"0 auto 14px" }}>
-              {user.name.split(" ").map(w=>w[0]).join("").slice(0,2).toUpperCase()}
+              {(profileUser.name || "Student").split(" ").map(w=>w[0]).join("").slice(0,2).toUpperCase()}
             </div>
-            <div style={{ fontSize:19, fontWeight:800, color:T.dark }}>{user.name}</div>
-            <div style={{ fontSize:13.5, color:T.muted, margin:"4px 0 14px" }}>Roll No: {user.rollNo||"22510"}</div>
-            <Tag color="violet">B.Tech CSE-AI · {user.semester||"7th"} Semester</Tag>
+            <div style={{ fontSize:19, fontWeight:800, color:T.dark }}>{profileUser.name}</div>
+            <div style={{ fontSize:13.5, color:T.muted, margin:"4px 0 14px" }}>Roll No: {profileUser.rollNo||"N/A"}</div>
+            <Tag color="violet">{profileUser.branch || "B.Tech CSE-AI"} · {profileUser.semester || "1st"} Semester</Tag>
             <div style={{ marginTop:18, display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
               <div style={{ background:T.bg, borderRadius:10, padding:12 }}>
-                <div style={{ fontSize:20, fontWeight:800, color:T.violetD }}>8.7</div>
+                <div style={{ fontSize:20, fontWeight:800, color:T.violetD }}>{profileUser.gpa || "N/A"}</div>
                 <div style={{ fontSize:11, color:T.muted }}>Current GPA</div>
               </div>
               <div style={{ background:T.bg, borderRadius:10, padding:12 }}>
-                <div style={{ fontSize:20, fontWeight:800, color:T.success }}>92%</div>
+                <div style={{ fontSize:20, fontWeight:800, color:T.success }}>{profileUser.attendance || 0}%</div>
                 <div style={{ fontSize:11, color:T.muted }}>Attendance</div>
               </div>
             </div>
           </Card>
           <Card style={{ marginTop:14 }}>
             <div style={{ fontSize:14, fontWeight:800, color:T.dark, marginBottom:14 }}>Contact Info</div>
-            {[["📧 Email","anshu.22510@mce.edu"],["📱 Phone","+91 9876543210"],["🏠 Address","Katihar, Bihar"],["🎂 DOB","15 March 2003"]].map(([l,v])=>(
+            {[["📧 Email", profileUser.email || "N/A"],["📱 Phone", profileUser.phone || "N/A"],["🏠 Address", profileUser.address || "N/A"],["🎂 DOB", profileUser.dob || "N/A"]].map(([l,v])=>(
               <div key={l} style={{ display:"flex", justifyContent:"space-between", padding:"8px 0", borderBottom:`1px solid ${T.border}`, fontSize:13 }}>
-                <span style={{ color:T.muted }}>{l}</span><span style={{ fontWeight:600, color:T.dark }}>{v}</span>
+                <span style={{ color:T.muted }}>{l}</span><span style={{ fontWeight:600, color:T.dark, textAlign:"right" }}>{v}</span>
               </div>
             ))}
           </Card>
@@ -917,7 +934,7 @@ function StudentProfile({ user }) {
           <Card>
             <div style={{ fontSize:15, fontWeight:800, color:T.dark, marginBottom:16 }}>Academic Details</div>
             <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
-              {[["Program","B.Tech CSE-AI"],["University","AKTU, Lucknow"],["Batch","2022–2026"],["Semester","7th (Current)"],["Section","A"],["Mentor","Prof. Juhi Kumari"]].map(([l,v])=>(
+              {[["Program", profileUser.branch || "B.Tech CSE-AI"], ["Batch", profileUser.batch || "N/A"], ["Semester", profileUser.semester || "1st"], ["Roll No", profileUser.rollNo || "N/A"], ["Registration No", profileUser.registrationNumber || "N/A"], ["Class", profileUser.class || "N/A"]].map(([l,v])=>(
                 <div key={l} style={{ background:T.bg, borderRadius:10, padding:"12px 14px" }}>
                   <div style={{ fontSize:11.5, color:T.muted, marginBottom:3 }}>{l}</div>
                   <div style={{ fontSize:14, fontWeight:700, color:T.dark }}>{v}</div>
@@ -1038,7 +1055,10 @@ function AdminOverview({ onNavigate }) {
 ══════════════════════════════════════════════════════ */
 function AdminStudents() {
   const [q, setQ] = useState("");
+  const [semesterFilter, setSemesterFilter] = useState("");
+  const [branchFilter, setBranchFilter] = useState("");
   const [students, setStudents] = useState([]);
+  const [selectedStudent, setSelectedStudent] = useState(null);
 
   const fetchStudents = () => {
     fetch("http://localhost:5001/students", {
@@ -1056,63 +1076,137 @@ function AdminStudents() {
     fetchStudents();
   }, []);
 
-  const list = students.filter(
-    s =>
-      s.name?.toLowerCase().includes(q.toLowerCase()) ||
-      s._id?.includes(q)
-  );
+  const list = students.filter(s => {
+    const matchQ = s.name?.toLowerCase().includes(q.toLowerCase()) || s.rollNo?.toLowerCase().includes(q.toLowerCase()) || s._id?.includes(q);
+    const matchSem = semesterFilter ? s.semester === semesterFilter : true;
+    const matchBranch = branchFilter ? s.branch === branchFilter : true;
+    return matchQ && matchSem && matchBranch;
+  });
 
   return (
     <div>
+      {selectedStudent && (
+        <div style={{ position:"fixed", top:0, left:0, right:0, bottom:0, background:"rgba(0,0,0,0.5)", zIndex:1000, display:"flex", alignItems:"center", justifyContent:"center" }}>
+          <Card style={{ width:"90%", maxWidth:600, maxHeight:"90vh", overflowY:"auto" }}>
+            <div style={{ display:"flex", justifyContent:"space-between", marginBottom:20 }}>
+              <div style={{ fontSize:18, fontWeight:800, color:"#1A1540" }}>Student Details</div>
+              <Btn v="ghost" sz="sm" onClick={() => setSelectedStudent(null)}>✕ Close</Btn>
+            </div>
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:14 }}>
+              <div>
+                <div style={{ fontSize:14, color:"#7B789E", marginBottom:2 }}>Name</div>
+                <div style={{ fontSize:16, fontWeight:700, color:"#1A1540" }}>{selectedStudent.name}</div>
+              </div>
+              <div>
+                <div style={{ fontSize:14, color:"#7B789E", marginBottom:2 }}>Roll No</div>
+                <div style={{ fontSize:16, fontWeight:700, color:"#1A1540" }}>{selectedStudent.rollNo || "N/A"}</div>
+              </div>
+              <div>
+                <div style={{ fontSize:14, color:"#7B789E", marginBottom:2 }}>Registration No</div>
+                <div style={{ fontSize:16, fontWeight:700, color:"#1A1540" }}>{selectedStudent.registrationNumber || "N/A"}</div>
+              </div>
+              <div>
+                <div style={{ fontSize:14, color:"#7B789E", marginBottom:2 }}>Batch</div>
+                <div style={{ fontSize:16, fontWeight:700, color:"#1A1540" }}>{selectedStudent.batch || "N/A"}</div>
+              </div>
+              <div>
+                <div style={{ fontSize:14, color:"#7B789E", marginBottom:2 }}>Branch</div>
+                <div style={{ fontSize:16, fontWeight:700, color:"#1A1540" }}>{selectedStudent.branch || "N/A"}</div>
+              </div>
+              <div>
+                <div style={{ fontSize:14, color:"#7B789E", marginBottom:2 }}>Semester</div>
+                <div style={{ fontSize:16, fontWeight:700, color:"#1A1540" }}>{selectedStudent.semester || "N/A"}</div>
+              </div>
+              <div>
+                <div style={{ fontSize:14, color:"#7B789E", marginBottom:2 }}>Email</div>
+                <div style={{ fontSize:16, fontWeight:700, color:"#1A1540" }}>{selectedStudent.email || "N/A"}</div>
+              </div>
+              <div>
+                <div style={{ fontSize:14, color:"#7B789E", marginBottom:2 }}>Phone</div>
+                <div style={{ fontSize:16, fontWeight:700, color:"#1A1540" }}>{selectedStudent.phone || "N/A"}</div>
+              </div>
+              <div>
+                <div style={{ fontSize:14, color:"#7B789E", marginBottom:2 }}>DOB</div>
+                <div style={{ fontSize:16, fontWeight:700, color:"#1A1540" }}>{selectedStudent.dob || "N/A"}</div>
+              </div>
+              <div>
+                <div style={{ fontSize:14, color:"#7B789E", marginBottom:2 }}>Address</div>
+                <div style={{ fontSize:16, fontWeight:700, color:"#1A1540" }}>{selectedStudent.address || "N/A"}</div>
+              </div>
+              <div>
+                <div style={{ fontSize:14, color:"#7B789E", marginBottom:2 }}>Attendance</div>
+                <div style={{ fontSize:16, fontWeight:700, color:"#10C98F" }}>{selectedStudent.attendance || 0}%</div>
+              </div>
+              <div>
+                <div style={{ fontSize:14, color:"#7B789E", marginBottom:2 }}>GPA</div>
+                <div style={{ fontSize:16, fontWeight:700, color:"#4F38C2" }}>{selectedStudent.gpa || 0}</div>
+              </div>
+            </div>
+          </Card>
+        </div>
+      )}
+
       <AddStudentForm onAdd={fetchStudents} />
 
       <SecHead
         title="Student Management"
         sub={`${students.length} students enrolled`}
-        action={<Btn v="primary" sz="sm">+ Enroll Student</Btn>}
       />
 
       <Card>
-        <div style={{ display: "flex", gap: 10, marginBottom: 18 }}>
+        <div style={{ display: "flex", gap: 10, marginBottom: 18, flexWrap: "wrap" }}>
           <input
             value={q}
             onChange={e => setQ(e.target.value)}
             placeholder="🔍  Search by name or roll number..."
-            style={{
-              flex: 1,
-              padding: "10px 14px",
-              border: `1.5px solid ${T.border}`,
-              borderRadius: 10,
-              fontSize: 13.5,
-              fontFamily: "inherit",
-              outline: "none"
-            }}
+            style={{ flex: 1, minWidth: "200px", padding: "10px 14px", border: `1.5px solid ${T.border}`, borderRadius: 10, fontSize: 13.5, outline: "none" }}
           />
-          <Btn v="ghost" sz="sm">Filter ▾</Btn>
+          <select value={semesterFilter} onChange={e => setSemesterFilter(e.target.value)} style={{ padding: "10px 14px", border: `1.5px solid ${T.border}`, borderRadius: 10, fontSize: 13.5, outline: "none" }}>
+            <option value="">All Semesters</option>
+            <option value="1st">1st Semester</option>
+            <option value="2nd">2nd Semester</option>
+            <option value="3rd">3rd Semester</option>
+            <option value="4th">4th Semester</option>
+            <option value="5th">5th Semester</option>
+            <option value="6th">6th Semester</option>
+            <option value="7th">7th Semester</option>
+            <option value="8th">8th Semester</option>
+          </select>
+
+          <select value={branchFilter} onChange={e => setBranchFilter(e.target.value)} style={{ padding: "10px 14px", border: `1.5px solid ${T.border}`, borderRadius: 10, fontSize: 13.5, outline: "none" }}>
+            <option value="">All Branches</option>
+            <option value="CSE-AI">CSE-AI</option>
+            <option value="CSE">CSE</option>
+            <option value="IT">IT</option>
+            <option value="ECE">ECE</option>
+            <option value="EEE">EEE</option>
+          </select>
           <Btn v="ghost" sz="sm">Export CSV</Btn>
         </div>
 
         <table style={{ width: "100%", borderCollapse: "collapse" }}>
-          <THead cols={["Roll No","Name","Class","Sem","Attendance","GPA","Fee Status","Rank","Action"]} />
+          <THead cols={["Roll No","Name","Branch","Sem","Attendance","GPA","Status","Action"]} />
           <tbody>
             {list.map(s => (
               <tr key={s._id} style={{ borderBottom: `1px solid ${T.border}` }}>
-                <td style={{ padding: "12px 14px", fontWeight: 700 }}>{s._id?.slice(-5)}</td>
+                <td style={{ padding: "12px 14px", fontWeight: 700 }}>{s.rollNo || s._id?.slice(-5)}</td>
                 <td style={{ padding: "12px 14px" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
                     {avi(s.name, 32)}
                     <div style={{ fontWeight: 700 }}>{s.name}</div>
                   </div>
                 </td>
-                <td style={{ padding: "12px 14px" }}>{s.class}</td>
+                <td style={{ padding: "12px 14px" }}>{s.branch || s.class || "N/A"}</td>
                 <td style={{ padding: "12px 14px" }}>{s.semester}</td>
                 <td style={{ padding: "12px 14px" }}>{s.attendance}%</td>
                 <td style={{ padding: "12px 14px", fontWeight: 700 }}>{s.gpa}</td>
                 <td style={{ padding: "12px 14px" }}><Tag color="mint">Active</Tag></td>
-                <td style={{ padding: "12px 14px" }}>-</td>
-                <td style={{ padding: "12px 14px" }}><Btn v="ghost" sz="sm">View →</Btn></td>
+                <td style={{ padding: "12px 14px" }}><Btn v="ghost" sz="sm" onClick={() => setSelectedStudent(s)}>View →</Btn></td>
               </tr>
             ))}
+            {list.length === 0 && (
+              <tr><td colSpan="8" style={{ padding:"24px", textAlign:"center", color:T.muted }}>No students found.</td></tr>
+            )}
           </tbody>
         </table>
       </Card>
@@ -2815,12 +2909,10 @@ export default function App() {
 }
 
 function AddStudentForm({ onAdd }) {
+  const [show, setShow] = useState(false);
   const [student, setStudent] = useState({
-    name: "",
-    class: "",
-    semester: "",
-    attendance: "",
-    gpa: ""
+    name: "", class: "", semester: "", attendance: "", gpa: "",
+    rollNo: "", registrationNumber: "", batch: "", email: "", phone: "", address: "", dob: "", branch: ""
   });
 
   const handleSubmit = async (e) => {
@@ -2840,7 +2932,8 @@ function AddStudentForm({ onAdd }) {
         return;
       }
       alert("Student Added Successfully");
-      setStudent({ name: "", class: "", semester: "", attendance: "", gpa: "" });
+      setStudent({ name: "", class: "", semester: "", attendance: "", gpa: "", rollNo: "", registrationNumber: "", batch: "", email: "", phone: "", address: "", dob: "", branch: "" });
+      setShow(false);
       if (onAdd) onAdd();
     } catch (error) {
       console.error(error);
@@ -2849,18 +2942,31 @@ function AddStudentForm({ onAdd }) {
   };
 
   return (
-    <Card style={{ marginBottom: 20 }}>
-      <SecHead title="➕ Add & Verify Student" sub="Enter the student's email (used for login) to auto-verify them" />
-      <form onSubmit={handleSubmit} style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
-        <Inp label="Student Email / Username *" value={student.name} onChange={(val) => setStudent({...student, name: val})} />
-        <Inp label="Class" value={student.class} onChange={(val) => setStudent({...student, class: val})} />
-        <Inp label="Semester" value={student.semester} onChange={(val) => setStudent({...student, semester: val})} />
-        <Inp label="Attendance" value={student.attendance} onChange={(val) => setStudent({...student, attendance: val})} />
-        <Inp label="GPA" value={student.gpa} onChange={(val) => setStudent({...student, gpa: val})} />
-        <div style={{ gridColumn: "span 2" }}>
-          <Btn v="primary" sz="md" type="submit">Verify & Add Student</Btn>
-        </div>
-      </form>
+    <Card style={{ marginBottom: 20, borderLeft: `4px solid ${T.violet}` }}>
+      <SecHead 
+        title="➕ Add & Verify Student" 
+        sub="Enter the student's email (used for login) to auto-verify them" 
+        action={<Btn v="ghost" sz="sm" onClick={() => setShow(!show)}>{show ? "Cancel" : "Expand Form"}</Btn>}
+      />
+      {show && (
+        <form onSubmit={handleSubmit} style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+          <Inp label="Student Email / Username *" value={student.name} onChange={(val) => setStudent({...student, name: val})} />
+          <Inp label="Roll No" value={student.rollNo} onChange={(val) => setStudent({...student, rollNo: val})} />
+          <Inp label="Registration No" value={student.registrationNumber} onChange={(val) => setStudent({...student, registrationNumber: val})} />
+          <Inp label="Branch" value={student.branch} onChange={(val) => setStudent({...student, branch: val})} />
+          <Inp label="Semester" value={student.semester} onChange={(val) => setStudent({...student, semester: val})} />
+          <Inp label="Batch" value={student.batch} onChange={(val) => setStudent({...student, batch: val})} />
+          <Inp label="Email" value={student.email} onChange={(val) => setStudent({...student, email: val})} />
+          <Inp label="Phone" value={student.phone} onChange={(val) => setStudent({...student, phone: val})} />
+          <Inp label="DOB" type="date" value={student.dob} onChange={(val) => setStudent({...student, dob: val})} />
+          <Inp label="Address" value={student.address} onChange={(val) => setStudent({...student, address: val})} />
+          <Inp label="Initial Attendance (%)" type="number" value={student.attendance} onChange={(val) => setStudent({...student, attendance: val})} />
+          <Inp label="Initial GPA" type="number" value={student.gpa} onChange={(val) => setStudent({...student, gpa: val})} />
+          <div style={{ gridColumn: "span 2", marginTop: 10 }}>
+            <Btn v="primary" sz="md" type="submit">Verify & Save Student</Btn>
+          </div>
+        </form>
+      )}
     </Card>
   );
 }
