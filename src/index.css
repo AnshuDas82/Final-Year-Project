@@ -1,0 +1,81 @@
+@import "tailwindcss";
+
+@theme{
+  --font-sans: 'Plus Jakarta Sans', sans-serif;
+  
+  --color-ink: #0D0B26;
+  --color-ink-l: #14113A;
+  --color-ink-m: #1E1A52;
+  --color-violet: #6C4EF5;
+  --color-violet-l: #8A70FF;
+  --color-violet-d: #4F38C2;
+  --color-amber: #F5A623;
+  --color-amber-l: #FFCA6B;
+  --color-amber-d: #C27A0A;
+  --color-coral: #FF6B6B;
+  --color-coral-l: #FF9B9B;
+  --color-mint: #00C9A7;
+  --color-mint-l: #6EE7D4;
+  --color-cyan: #38BDF8;
+  --color-page: #F4F3FF;
+  --color-card: #FFFFFF;
+  --color-dark: #1A1540;
+  --color-mid: #4B4580;
+  --color-muted: #7B789E;
+  --color-light: #B8B5D4;
+  --color-border: #E8E6F5;
+  --color-success: #10C98F;
+  --color-danger: #FF5757;
+  --color-warning: #FFAA00;
+  --color-info: #5097FF;
+}
+
+* {
+  box-sizing: border-box;
+  font-family: 'Plus Jakarta Sans', sans-serif;
+}
+
+html, body, #root {
+  height: 100%;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #C4C1E0; border-radius: 10px; }
+::-webkit-scrollbar-thumb:hover { background: #9995C0; }
+
+/* Gradient helpers */
+.gr-violet { background: linear-gradient(135deg, #4F38C2, #6C4EF5); }
+.gr-amber  { background: linear-gradient(135deg, #C27A0A, #F5A623); }
+.gr-coral  { background: linear-gradient(135deg, #E63E3E, #FF6B6B); }
+.gr-mint   { background: linear-gradient(135deg, #008F73, #00C9A7); }
+.gr-cyan   { background: linear-gradient(135deg, #1E8CC0, #38BDF8); }
+.gr-ink    { background: linear-gradient(160deg, #0D0B26 0%, #1E1A52 100%); }
+
+/* Sidebar nav active */
+.nav-item-active {
+  background: rgba(108,78,245,0.25) !important;
+  color: #8A70FF !important;
+  border-left-color: #8A70FF !important;
+  font-weight: 700 !important;
+}
+
+/* Smooth transitions for nav items */
+.nav-item {
+  transition: background 0.15s, color 0.15s;
+}
+.nav-item:hover {
+  background: rgba(255,255,255,0.07);
+  color: rgba(255,255,255,0.85);
+}
+
+/* Input focus ring */
+.edu-input:focus {
+  border-color: #6C4EF5 !important;
+  outline: none;
+}
