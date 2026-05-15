@@ -380,31 +380,91 @@ export function AdminSubjects() {
 
 /* ── Admin Classes ────────────────────────────────────────────────────────── */
 export function AdminClasses() {
-  const cls = [
-    { name:"B.Tech CSE-AI 7th Sem", students:60, teacher:"Prof. Juhi Kumari", room:"CS-201", avg:88 },
-    { name:"B.Tech CSE 5th Sem",    students:65, teacher:"Dr. Ramesh Gupta",   room:"CS-101", avg:83 },
-    { name:"B.Tech CSE-AI 5th Sem", students:58, teacher:"Prof. Anita Sinha",  room:"CS-202", avg:85 },
-    { name:"B.Tech IT 3rd Sem",     students:62, teacher:"Dr. Vijay Kumar",    room:"IT-101", avg:80 },
-  ];
-  const colors = ["#6C4EF5","#FF6B6B","#00C9A7","#F5A623"];
+  const [classes, setClasses] = useState([]);
+  const [show, setShow] = useState(false);
+  const [teachers, setTeachers] = useState([]);
+  const [newClass, setNewClass] = useState({ name: "", subject: "", semester: "", branch: "", teacher: "", room: "" });
+
+  useEffect(() => {
+    fetch("http://localhost:5001/classes", {
+      headers: { "Authorization": `Bearer ${localStorage.getItem("token")}` }
+    })
+      .then(r => r.json())
+      .then(d => { if (Array.isArray(d)) setClasses(d); })
+      .catch(() => {});
+      
+    fetch("http://localhost:5001/teachers", {
+      headers: { "Authorization": `Bearer ${localStorage.getItem("token")}` }
+    })
+      .then(r => r.json())
+      .then(d => { if (Array.isArray(d)) setTeachers(d); })
+      .catch(() => {});
+  }, []);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    try {
+      await fetch("http://localhost:5001/classes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${localStorage.getItem("token")}` },
+        body: JSON.stringify(newClass)
+      });
+      alert("Class added successfully");
+      window.location.reload();
+    } catch (err) { console.error(err); }
+  };
+
+  const colors = ["#6C4EF5","#FF6B6B","#00C9A7","#F5A623", "#38BDF8", "#8A70FF"];
   return (
     <div>
-      <SectionHeader title="Class Management" action={<Button variant="primary" size="sm">+ Add Class</Button>} />
+      <SectionHeader title="Class Management" action={<Button variant="primary" size="sm" onClick={() => setShow(!show)}>+ Add Class</Button>} />
+      
+      {show && (
+        <Card className="mb-5 border-l-4 border-l-[#6C4EF5]">
+          <div className="text-[15px] font-extrabold text-[#1A1540] mb-3.5">Create New Class</div>
+          <form onSubmit={handleSubmit}>
+            <div className="grid grid-cols-2 gap-3 mb-3">
+              <Input label="Class Name (e.g. B.Tech CSE 5th Sem)" value={newClass.name} onChange={v => setNewClass({...newClass, name:v})} />
+              <Input label="Subject" value={newClass.subject} onChange={v => setNewClass({...newClass, subject:v})} />
+              <Input label="Semester" value={newClass.semester} onChange={v => setNewClass({...newClass, semester:v})} />
+              <Input label="Branch" value={newClass.branch} onChange={v => setNewClass({...newClass, branch:v})} />
+              <Input label="Room" value={newClass.room} onChange={v => setNewClass({...newClass, room:v})} />
+              
+              <div className="flex flex-col mb-3.5">
+                <label className="block text-[12.5px] font-bold text-[#1A1540] mb-1.5">Assign Teacher</label>
+                <select value={newClass.teacher} onChange={e => setNewClass({...newClass, teacher:e.target.value})} className="px-3.5 py-2.5 border-[1.5px] border-[#E8E6F5] rounded-[10px] text-[13.5px] outline-none focus:border-[#6C4EF5] transition-colors">
+                  <option value="">Select Verified Teacher</option>
+                  {teachers.map(t => (
+                    <option key={t._id} value={t.name}>{t.name} ({t.subject})</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <Button type="submit" variant="primary" size="sm">Save Class</Button>
+              <Button type="button" variant="ghost" size="sm" onClick={() => setShow(false)}>Cancel</Button>
+            </div>
+          </form>
+        </Card>
+      )}
+
       <div className="grid grid-cols-2 gap-3.5">
-        {cls.map((c,i) => (
-          <Card key={i} className="border-t-4" style={{ borderTopColor: colors[i] }}>
+        {classes.length === 0 ? <div className="col-span-2 text-center py-10 text-[#7B789E]">No classes found. Add one above.</div> : null}
+        {classes.map((c,i) => (
+          <Card key={i} className="border-t-4" style={{ borderTopColor: colors[i % colors.length] }}>
             <div className="flex justify-between items-start mb-3">
               <div>
                 <div className="text-[15px] font-extrabold text-[#1A1540]">{c.name}</div>
-                <div className="text-[13px] text-[#7B789E] mt-0.5">👨‍🏫 {c.teacher}</div>
+                <div className="text-[13px] text-[#7B789E] mt-0.5">👨‍🏫 {c.teacher} | 📚 {c.subject}</div>
+                <div className="text-[12px] text-[#7B789E] mt-0.5">🌿 {c.branch} | 📅 Sem: {c.semester}</div>
               </div>
-              <Tag color="violet">Room {c.room}</Tag>
+              <Tag color="violet">Room {c.room || "TBA"}</Tag>
             </div>
             <div className="flex gap-5 mb-3.5">
-              <div><div className="text-[20px] font-extrabold text-[#1A1540]">{c.students}</div><div className="text-[11px] text-[#7B789E]">Students</div></div>
-              <div><div className="text-[20px] font-extrabold text-[#4F38C2]">{c.avg}%</div><div className="text-[11px] text-[#7B789E]">Avg Score</div></div>
+              <div><div className="text-[20px] font-extrabold text-[#1A1540]">{c.students || 0}</div><div className="text-[11px] text-[#7B789E]">Students</div></div>
+              <div><div className="text-[20px] font-extrabold text-[#4F38C2]">{c.avg || 0}%</div><div className="text-[11px] text-[#7B789E]">Avg Score</div></div>
             </div>
-            <ProgressBar value={c.avg} colorClass={["bg-[#6C4EF5]","bg-[#FF6B6B]","bg-[#00C9A7]","bg-[#F5A623]"][i]} height="h-1.5" />
+            <ProgressBar value={c.avg || 0} colorClass="bg-[#6C4EF5]" height="h-1.5" />
             <div className="flex gap-2 mt-3.5">
               <Button variant="ghost" size="sm" className="flex-1">View Details</Button>
               <Button variant="primary" size="sm" className="flex-1">Manage →</Button>

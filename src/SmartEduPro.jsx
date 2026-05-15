@@ -418,7 +418,7 @@ function Sidebar({ user, active, setActive, onLogout, notifCount }) {
   const navs = {
     admin:   [
       {k:"overview",ic:"⬛",l:"Dashboard"},{k:"students",ic:"👤",l:"Students"},{k:"teachers",ic:"👥",l:"Teachers"},
-      {k:"classes",ic:"🏫",l:"Classes"},{k:"subjects",ic:"📚",l:"Subjects"},{k:"fees",ic:"💳",l:"Fee Management"},
+      {k:"classes",ic:"🏫",l:"Classes"},{k:"subjects",ic:"📚",l:"Subjects"},
       {k:"timetable",ic:"📅",l:"Timetable"},{k:"events",ic:"🗓️",l:"Events"},{k:"noticeboard",ic:"📢",l:"Notice Board"},{k:"analytics",ic:"📊",l:"Analytics"},
     ],
     teacher: [
@@ -1590,9 +1590,13 @@ function TimetableView() {
             <label style={{ display:"block", fontSize:12.5, fontWeight:700, color:T.dark, marginBottom:5 }}>Semester</label>
             <select value={semester} onChange={e=>setSemester(e.target.value)} style={{ width:"100%", padding:"10px 14px", border:`1.5px solid ${T.border}`, borderRadius:10, fontSize:13.5, fontFamily:"inherit", outline:"none" }}>
               <option value="1st">1st Semester</option>
+              <option value="2nd">2nd Semester</option>
               <option value="3rd">3rd Semester</option>
+              <option value="4th">4th Semester</option>
               <option value="5th">5th Semester</option>
+              <option value="6th">6th Semester</option>
               <option value="7th">7th Semester</option>
+              <option value="8th">8th Semester</option>
             </select>
           </div>
         </div>
@@ -2771,46 +2775,157 @@ function StudentResults() {
 ══════════════════════════════════════════════════════ */
 function AdminClasses() {
   const [classes, setClasses] = useState([]);
+  const [viewClass, setViewClass] = useState(null);
+  const [manageClass, setManageClass] = useState(null);
+  const [editData, setEditData] = useState({});
+  const [saving, setSaving] = useState(false);
 
   const fetchClasses = () => {
     fetch("http://localhost:5001/classes", {
       headers: { "Authorization": `Bearer ${localStorage.getItem("token")}` }
     })
       .then(res => res.json())
-      .then(data => {
-        if (Array.isArray(data)) setClasses(data);
-        else console.error("Error fetching classes:", data);
-      })
+      .then(data => { if (Array.isArray(data)) setClasses(data); })
       .catch(err => console.log(err));
   };
 
-  useEffect(() => {
-    fetchClasses();
-  }, []);
+  useEffect(() => { fetchClasses(); }, []);
+
+  const openManage = (c) => {
+    setManageClass(c);
+    setEditData({ name: c.name, subject: c.subject, semester: c.semester, branch: c.branch, teacher: c.teacher, room: c.room, students: c.students, avg: c.avg });
+  };
+
+  const handleUpdate = async () => {
+    setSaving(true);
+    try {
+      const res = await fetch(`http://localhost:5001/classes/${manageClass._id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${localStorage.getItem("token")}` },
+        body: JSON.stringify(editData)
+      });
+      const data = await res.json();
+      if (!res.ok) { alert(data.message || "Update failed"); return; }
+      alert("Class updated successfully!");
+      setManageClass(null);
+      fetchClasses();
+    } catch (err) { alert("Error: " + err.message); }
+    setSaving(false);
+  };
+
+  const handleDelete = async (id) => {
+    if (!window.confirm("Are you sure you want to delete this class? This cannot be undone.")) return;
+    try {
+      const res = await fetch(`http://localhost:5001/classes/${id}`, {
+        method: "DELETE",
+        headers: { "Authorization": `Bearer ${localStorage.getItem("token")}` }
+      });
+      const data = await res.json();
+      if (!res.ok) { alert(data.message || "Delete failed"); return; }
+      alert("Class deleted.");
+      setManageClass(null);
+      fetchClasses();
+    } catch (err) { alert("Error: " + err.message); }
+  };
+
+  const Overlay = ({ children, onClose }) => (
+    <div onClick={onClose} style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.55)", zIndex:1000, display:"flex", alignItems:"center", justifyContent:"center", padding:20 }}>
+      <div onClick={e => e.stopPropagation()} style={{ background:T.bgCard, borderRadius:18, padding:30, width:"100%", maxWidth:560, maxHeight:"90vh", overflowY:"auto", boxShadow:"0 24px 64px rgba(108,78,245,0.2)" }}>
+        {children}
+      </div>
+    </div>
+  );
+
+  const colors = [T.violet, T.coral, T.mint, T.amber];
 
   return (
     <div>
+      {/* VIEW DETAILS MODAL */}
+      {viewClass && (
+        <Overlay onClose={() => setViewClass(null)}>
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20 }}>
+            <div style={{ fontSize:18, fontWeight:800, color:T.dark }}>📋 Class Details</div>
+            <Btn v="ghost" sz="sm" onClick={() => setViewClass(null)}>✕ Close</Btn>
+          </div>
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:16 }}>
+            {[
+              ["Class Name", viewClass.name],
+              ["Subject", viewClass.subject || "—"],
+              ["Semester", viewClass.semester || "—"],
+              ["Branch", viewClass.branch || "—"],
+              ["Teacher", viewClass.teacher || "—"],
+              ["Room", viewClass.room || "TBA"],
+              ["Total Students", viewClass.students ?? 0],
+              ["Average Score", `${viewClass.avg ?? 0}%`],
+            ].map(([label, val]) => (
+              <div key={label} style={{ background:T.bg, borderRadius:10, padding:"12px 14px" }}>
+                <div style={{ fontSize:11.5, color:T.muted, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.06em", marginBottom:4 }}>{label}</div>
+                <div style={{ fontSize:15, fontWeight:800, color:T.dark }}>{val}</div>
+              </div>
+            ))}
+          </div>
+          <div style={{ marginTop:20, display:"flex", gap:8 }}>
+            <Btn v="primary" sz="sm" onClick={() => { setViewClass(null); openManage(viewClass); }}>✏️ Edit Class</Btn>
+            <Btn v="danger" sz="sm" onClick={() => { setViewClass(null); handleDelete(viewClass._id); }}>🗑️ Delete</Btn>
+          </div>
+        </Overlay>
+      )}
+
+      {/* MANAGE MODAL */}
+      {manageClass && (
+        <Overlay onClose={() => setManageClass(null)}>
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20 }}>
+            <div style={{ fontSize:18, fontWeight:800, color:T.dark }}>⚙️ Manage Class</div>
+            <Btn v="ghost" sz="sm" onClick={() => setManageClass(null)}>✕ Close</Btn>
+          </div>
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:14, marginBottom:16 }}>
+            <Inp label="Class Name" value={editData.name || ""} onChange={v => setEditData({...editData, name:v})} />
+            <Inp label="Subject" value={editData.subject || ""} onChange={v => setEditData({...editData, subject:v})} />
+            <Inp label="Semester" value={editData.semester || ""} onChange={v => setEditData({...editData, semester:v})} />
+            <Inp label="Branch" value={editData.branch || ""} onChange={v => setEditData({...editData, branch:v})} />
+            <Inp label="Teacher" value={editData.teacher || ""} onChange={v => setEditData({...editData, teacher:v})} />
+            <Inp label="Room" value={editData.room || ""} onChange={v => setEditData({...editData, room:v})} />
+            <Inp label="Total Students" type="number" value={editData.students ?? 0} onChange={v => setEditData({...editData, students:Number(v)})} />
+            <Inp label="Average Score (%)" type="number" value={editData.avg ?? 0} onChange={v => setEditData({...editData, avg:Number(v)})} />
+          </div>
+          <div style={{ display:"flex", gap:8, paddingTop:14, borderTop:`1px solid ${T.border}` }}>
+            <Btn v="primary" sz="md" onClick={handleUpdate} disabled={saving}>{saving ? "Saving..." : "💾 Save Changes"}</Btn>
+            <Btn v="danger" sz="md" onClick={() => handleDelete(manageClass._id)}>🗑️ Delete Class</Btn>
+            <Btn v="ghost" sz="md" onClick={() => setManageClass(null)}>Cancel</Btn>
+          </div>
+        </Overlay>
+      )}
+
       <AddClassForm onAdd={fetchClasses} />
-      
       <SecHead title="Class Management" sub={`${classes.length} active classes`} />
+
+      {classes.length === 0 && (
+        <div style={{ textAlign:"center", padding:"60px 20px", color:T.muted }}>
+          <div style={{ fontSize:48, marginBottom:12 }}>🏫</div>
+          <div style={{ fontWeight:700, fontSize:15 }}>No classes yet.</div>
+          <div style={{ fontSize:13 }}>Use "Expand Form" above to add your first class.</div>
+        </div>
+      )}
+
       <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:14 }}>
-        {classes.map((c,i)=>(
-          <Card key={c._id || i} style={{ borderTop:`4px solid ${[T.violet,T.coral,T.mint,T.amber][i%4]}` }}>
+        {classes.map((c, i) => (
+          <Card key={c._id || i} style={{ borderTop:`4px solid ${colors[i % colors.length]}` }}>
             <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:12 }}>
               <div>
                 <div style={{ fontSize:15, fontWeight:800, color:T.dark }}>{c.name}</div>
-                <div style={{ fontSize:13, color:T.muted, marginTop:3 }}>👨‍🏫 {c.teacher}</div>
+                <div style={{ fontSize:13, color:T.muted, marginTop:3 }}>👨‍🏫 {c.teacher} · 📚 {c.subject || "—"}</div>
+                <div style={{ fontSize:12, color:T.light, marginTop:2 }}>🌿 {c.branch || "—"} · Sem {c.semester || "—"}</div>
               </div>
-              <Tag color="violet">Room {c.room}</Tag>
+              <Tag color="violet">Room {c.room || "TBA"}</Tag>
             </div>
             <div style={{ display:"flex", gap:20, marginBottom:14 }}>
-              <div><div style={{ fontSize:20, fontWeight:800, color:T.dark }}>{c.students}</div><div style={{ fontSize:11, color:T.muted }}>Students</div></div>
-              <div><div style={{ fontSize:20, fontWeight:800, color:T.violetD }}>{c.avg}%</div><div style={{ fontSize:11, color:T.muted }}>Avg Score</div></div>
+              <div><div style={{ fontSize:20, fontWeight:800, color:T.dark }}>{c.students ?? 0}</div><div style={{ fontSize:11, color:T.muted }}>Students</div></div>
+              <div><div style={{ fontSize:20, fontWeight:800, color:T.violetD }}>{c.avg ?? 0}%</div><div style={{ fontSize:11, color:T.muted }}>Avg Score</div></div>
             </div>
-            <ProgressBar value={c.avg} color={[T.violet,T.coral,T.mint,T.amber][i%4]} height={5}/>
+            <ProgressBar value={c.avg ?? 0} color={colors[i % colors.length]} height={5} />
             <div style={{ display:"flex", gap:8, marginTop:14 }}>
-              <Btn v="ghost" sz="sm" style={{ flex:1 }}>View Details</Btn>
-              <Btn v="primary" sz="sm" style={{ flex:1 }}>Manage →</Btn>
+              <Btn v="ghost" sz="sm" style={{ flex:1 }} onClick={() => setViewClass(c)}>View Details</Btn>
+              <Btn v="primary" sz="sm" style={{ flex:1 }} onClick={() => openManage(c)}>Manage →</Btn>
             </div>
           </Card>
         ))}
@@ -2865,7 +2980,7 @@ export default function App() {
   const render=()=>{
     /* ADMIN */
     if(user.role==="admin"){
-      const v={overview:<AdminOverview onNavigate={setNav}/>,students:<AdminStudents/>,teachers:<AdminTeachers/>,classes:<AdminClasses/>,subjects:<AdminSubjects/>,fees:<FeeManagement/>,timetable:<TimetableView/>,events:<EventsCalendar/>,noticeboard:<NoticeBoard user={user}/>,analytics:<AdminAnalytics/>};
+      const v={overview:<AdminOverview onNavigate={setNav}/>,students:<AdminStudents/>,teachers:<AdminTeachers/>,classes:<AdminClasses/>,subjects:<AdminSubjects/>,timetable:<TimetableView/>,events:<EventsCalendar/>,noticeboard:<NoticeBoard user={user}/>,analytics:<AdminAnalytics/>};
       return v[nav]||<AdminOverview onNavigate={setNav}/>;
     }
     /* TEACHER */
@@ -3023,47 +3138,74 @@ function AddTeacherForm({ onAdd }) {
 }
 
 function AddClassForm({ onAdd }) {
+  const [show, setShow] = useState(false);
   const [cls, setCls] = useState({
-    name: "",
-    students: 0,
-    teacher: "",
-    room: "",
-    avg: 0
+    name: "", subject: "", semester: "", branch: "", teacher: "", room: "", students: 0, avg: 0
   });
+  const [teachers, setTeachers] = useState([]);
+
+  useEffect(() => {
+    fetch("http://localhost:5001/teachers", {
+      headers: { "Authorization": `Bearer ${localStorage.getItem("token")}` }
+    })
+      .then(res => res.json())
+      .then(data => { if (Array.isArray(data)) setTeachers(data); })
+      .catch(() => {});
+  }, []);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (!cls.name || !cls.subject || !cls.semester || !cls.branch || !cls.teacher) {
+      alert("Please fill in all required fields (Name, Subject, Semester, Branch, Teacher).");
+      return;
+    }
     try {
-      await fetch("http://localhost:5001/classes", {
+      const res = await fetch("http://localhost:5001/classes", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${localStorage.getItem("token")}`
-        },
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${localStorage.getItem("token")}` },
         body: JSON.stringify(cls)
       });
+      const data = await res.json();
+      if (!res.ok) { alert(data.message || "Failed to add class"); return; }
       alert("Class Added Successfully");
+      setCls({ name: "", subject: "", semester: "", branch: "", teacher: "", room: "", students: 0, avg: 0 });
+      setShow(false);
       if (onAdd) onAdd();
-      setCls({ name: "", students: 0, teacher: "", room: "", avg: 0 });
     } catch (error) {
       console.error(error);
+      alert("An error occurred. Make sure the server is running.");
     }
   };
 
   return (
-    <Card style={{ marginBottom: 20 }}>
-      <SecHead title="➕ Add Class" />
-      <form onSubmit={handleSubmit}>
-        <Inp label="Class Name (e.g. B.Tech CSE 7th Sem)" value={cls.name} onChange={val => setCls({...cls, name: val})} />
-        <Inp label="Class Teacher" value={cls.teacher} onChange={val => setCls({...cls, teacher: val})} />
-        <Inp label="Room Number" value={cls.room} onChange={val => setCls({...cls, room: val})} />
-        <Inp label="Total Students" type="number" value={cls.students} onChange={val => setCls({...cls, students: Number(val)})} />
-        <Inp label="Average Score (%)" type="number" value={cls.avg} onChange={val => setCls({...cls, avg: Number(val)})} />
-        <Btn v="primary" sz="md" type="submit">Add Class</Btn>
-      </form>
+    <Card style={{ marginBottom: 20, borderLeft: `4px solid ${T.violet}` }}>
+      <SecHead title="➕ Add Class" action={<Btn v="ghost" sz="sm" onClick={() => setShow(!show)}>{show ? "Cancel" : "Expand Form"}</Btn>} />
+      {show && (
+        <form onSubmit={handleSubmit} style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+          <Inp label="Class Name (e.g. B.Tech CSE 7th Sem) *" value={cls.name} onChange={val => setCls({...cls, name: val})} />
+          <Inp label="Subject *" value={cls.subject} onChange={val => setCls({...cls, subject: val})} />
+          <Inp label="Semester (e.g. 7th) *" value={cls.semester} onChange={val => setCls({...cls, semester: val})} />
+          <Inp label="Branch (e.g. CSE-AI) *" value={cls.branch} onChange={val => setCls({...cls, branch: val})} />
+          <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+            <label style={{ fontSize: 13, fontWeight: 700, color: T.dark }}>Assign Teacher *</label>
+            <select value={cls.teacher} onChange={e => setCls({...cls, teacher: e.target.value})}
+              style={{ padding: "10px 14px", border: `1.5px solid ${T.border}`, borderRadius: 10, fontSize: 13.5, fontFamily: "inherit", outline: "none" }} required>
+              <option value="">-- Select Teacher --</option>
+              {teachers.map(t => <option key={t._id} value={t.name}>{t.name} ({t.subject || t.dept})</option>)}
+            </select>
+          </div>
+          <Inp label="Room Number" value={cls.room} onChange={val => setCls({...cls, room: val})} />
+          <Inp label="Total Students" type="number" value={cls.students} onChange={val => setCls({...cls, students: Number(val)})} />
+          <Inp label="Average Score (%)" type="number" value={cls.avg} onChange={val => setCls({...cls, avg: Number(val)})} />
+          <div style={{ gridColumn: "span 2", marginTop: 10 }}>
+            <Btn v="primary" sz="md" type="submit">Save Class</Btn>
+          </div>
+        </form>
+      )}
     </Card>
   );
 }
+
 
 function AddSubjectForm({ onAdd, teachers = [] }) {
   const [subj, setSubj] = useState({

@@ -8,6 +8,17 @@ import {
 
 /* ── Teacher Dashboard ────────────────────────────────────────────────────── */
 export function TeacherOverview({ user }) {
+  const [notifications, setNotifications] = useState([]);
+
+  useEffect(() => {
+    fetch("http://localhost:5001/teacher/notifications", {
+      headers: { "Authorization": `Bearer ${localStorage.getItem("token")}` }
+    })
+      .then(r => r.json())
+      .then(d => { if (Array.isArray(d)) setNotifications(d); })
+      .catch(() => {});
+  }, []);
+
   return (
     <div>
       <SectionHeader title={`Welcome, ${user.name.split(" ")[1]||user.name} 👋`} sub="Here's your teaching summary for today" />
@@ -40,16 +51,30 @@ export function TeacherOverview({ user }) {
             </div>
           ))}
         </Card>
-        <Card>
-          <div className="text-[14.5px] font-extrabold text-[#1A1540] mb-3.5">Today's Schedule</div>
-          {[{t:"9:00 AM",sub:"AI — Room CS-201",type:"Lecture"},{t:"11:00 AM",sub:"DSA Lab — Lab 3",type:"Lab"},{t:"2:00 PM",sub:"ML — Room CS-202",type:"Lecture"}].map((s,i) => (
-            <div key={i} className="flex gap-3 px-3 py-2.5 bg-[#F4F3FF] rounded-[10px] mb-2 items-center">
-              <div className="font-extrabold text-[12.5px] text-[#4F38C2] min-w-[62px]">{s.t}</div>
-              <div className="flex-1 text-[13.5px] font-bold text-[#1A1540]">{s.sub}</div>
-              <Tag color={s.type==="Lab"?"amber":"violet"}>{s.type}</Tag>
-            </div>
-          ))}
-        </Card>
+        <div className="flex flex-col gap-3.5">
+          <Card>
+            <div className="text-[14.5px] font-extrabold text-[#1A1540] mb-3.5">Notifications</div>
+            {notifications.length === 0 ? <div className="text-[13px] text-[#7B789E]">No new notifications</div> : null}
+            {notifications.slice(0, 3).map((n, i) => (
+              <div key={i} className="flex gap-3 px-3 py-2.5 bg-[#F4F3FF] border-l-[3px] border-[#F5A623] rounded-[8px] mb-2 items-center">
+                <div className="flex-1">
+                  <div className="text-[13px] font-bold text-[#1A1540] leading-tight">{n.message}</div>
+                  <div className="text-[11px] text-[#7B789E] mt-1">{new Date(n.date).toLocaleString()}</div>
+                </div>
+              </div>
+            ))}
+          </Card>
+          <Card>
+            <div className="text-[14.5px] font-extrabold text-[#1A1540] mb-3.5">Today's Schedule</div>
+            {[{t:"9:00 AM",sub:"AI — Room CS-201",type:"Lecture"},{t:"11:00 AM",sub:"DSA Lab — Lab 3",type:"Lab"},{t:"2:00 PM",sub:"ML — Room CS-202",type:"Lecture"}].map((s,i) => (
+              <div key={i} className="flex gap-3 px-3 py-2.5 bg-[#F4F3FF] rounded-[10px] mb-2 items-center">
+                <div className="font-extrabold text-[12.5px] text-[#4F38C2] min-w-[62px]">{s.t}</div>
+                <div className="flex-1 text-[13.5px] font-bold text-[#1A1540]">{s.sub}</div>
+                <Tag color={s.type==="Lab"?"amber":"violet"}>{s.type}</Tag>
+              </div>
+            ))}
+          </Card>
+        </div>
       </div>
     </div>
   );

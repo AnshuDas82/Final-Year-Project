@@ -281,7 +281,60 @@ app.post("/classes", verifyToken, authorizeRoles('admin'), async (req, res) => {
   try {
     const newClass = new Class({ ...req.body, adminId: req.user.id })
     await newClass.save()
+    
+    // Add notification to the teacher
+    const teacherUsername = req.body.teacher;
+    if (teacherUsername) {
+      await Teacher.findOneAndUpdate(
+        { name: teacherUsername, adminId: req.user.id },
+        {
+          $push: {
+            notifications: {
+              message: `You have been assigned to teach ${req.body.subject} for ${req.body.branch} (Semester: ${req.body.semester}).`
+            }
+          }
+        }
+      );
+    }
+    
     res.json(newClass)
+  } catch (error) {
+    res.status(500).json({ error: error.message })
+  }
+})
+
+app.put("/classes/:id", verifyToken, authorizeRoles('admin'), async (req, res) => {
+  try {
+    const cls = await Class.findOneAndUpdate(
+      { _id: req.params.id, adminId: req.user.id },
+      req.body,
+      { new: true }
+    )
+    if (!cls) return res.status(404).json({ message: "Class not found" })
+    res.json(cls)
+  } catch (error) {
+    res.status(500).json({ error: error.message })
+  }
+})
+
+app.delete("/classes/:id", verifyToken, authorizeRoles('admin'), async (req, res) => {
+  try {
+    const cls = await Class.findOneAndDelete({ _id: req.params.id, adminId: req.user.id })
+    if (!cls) return res.status(404).json({ message: "Class not found" })
+    res.json({ message: "Class deleted successfully" })
+  } catch (error) {
+    res.status(500).json({ error: error.message })
+  }
+})
+
+app.get("/teacher/notifications", verifyToken, authorizeRoles('teacher'), async (req, res) => {
+  try {
+    const profile = await getVerifiedTeacherProfile(req.user.id)
+    if (!profile) return res.status(403).json({ error: "NOT_VERIFIED", message: "Not verified by admin" })
+    
+    // Sort notifications by date descending
+    const notifs = (profile.notifications || []).sort((a, b) => new Date(b.date) - new Date(a.date))
+    res.json(notifs)
   } catch (error) {
     res.status(500).json({ error: error.message })
   }

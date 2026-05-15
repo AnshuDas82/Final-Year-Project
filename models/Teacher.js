@@ -8,7 +8,12 @@ const teacherSchema = new mongoose.Schema({
   rating: { type: Number, default: 0 },
   students: { type: Number, default: 0 },
   classes: { type: Number, default: 0 },
-  adminId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }
+  adminId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  notifications: [{
+    message: String,
+    date: { type: Date, default: Date.now },
+    read: { type: Boolean, default: false }
+  }]
 })
 
 export default mongoose.model("Teacher", teacherSchema)
