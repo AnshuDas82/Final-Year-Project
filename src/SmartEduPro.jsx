@@ -952,92 +952,142 @@ function StudentProfile({ user }) {
    ADMIN OVERVIEW
 ══════════════════════════════════════════════════════ */
 function AdminOverview({ onNavigate }) {
-  const [stats, setStats] = useState({
-    totalStudents: "...",
-    totalTeachers: "...",
-    subjectsActive: "...",
-    feeCollection: "..."
-  });
-
-  const [alerts, setAlerts] = useState([
-    { id: 1, t: "6 students below 75% attendance", c: "coral" },
-    { id: 2, t: "Fee overdue for 3 students", c: "warning" },
-    { id: 3, t: "4 assignments not graded", c: "amber" },
-    { id: 4, t: "Server backup completed ✓", c: "mint" }
-  ]);
+  const [stats, setStats] = useState({ totalStudents: 0, totalTeachers: 0, totalSubjects: 0, totalClasses: 0 });
+  const [subjects, setSubjects] = useState([]);
+  const [alerts, setAlerts] = useState([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch("http://localhost:5001/dashboard/summary", {
-      headers: { "Authorization": `Bearer ${localStorage.getItem("token")}` }
-    })
-      .then(res => res.json())
-      .then(data => {
-        if (!data.error) {
-          setStats(data);
-          setAlerts(prev => [
-            { id: 5, t: `${data.totalStudents || 0} students enrolled in system`, c: "mint" },
-            { id: 6, t: `System tracking ${data.totalTeachers || 0} faculty members`, c: "mint" },
-            ...prev.slice(0, 2)
-          ]);
-        }
+    const token = localStorage.getItem("token");
+    const h = { "Authorization": `Bearer ${token}` };
+
+    Promise.all([
+      fetch("http://localhost:5001/students",  { headers: h }).then(r => r.json()),
+      fetch("http://localhost:5001/teachers",  { headers: h }).then(r => r.json()),
+      fetch("http://localhost:5001/subjects",  { headers: h }).then(r => r.json()),
+      fetch("http://localhost:5001/classes",   { headers: h }).then(r => r.json()),
+    ])
+      .then(([students, teachers, subjs, classes]) => {
+        const sc = Array.isArray(students) ? students.length : 0;
+        const tc = Array.isArray(teachers) ? teachers.length : 0;
+        const sbc = Array.isArray(subjs) ? subjs.length : 0;
+        const cc = Array.isArray(classes) ? classes.length : 0;
+
+        setStats({ totalStudents: sc, totalTeachers: tc, totalSubjects: sbc, totalClasses: cc });
+        if (Array.isArray(subjs)) setSubjects(subjs);
+
+        // Real alerts based on live data
+        const newAlerts = [];
+        if (sc === 0) newAlerts.push({ id: 1, t: "No students enrolled yet — add students to get started.", c: "warning" });
+        if (tc === 0) newAlerts.push({ id: 2, t: "No teachers added yet — go to Teachers to add faculty.", c: "warning" });
+        if (sbc === 0) newAlerts.push({ id: 3, t: "No subjects created — add subjects in the Subjects section.", c: "amber" });
+        if (cc === 0) newAlerts.push({ id: 4, t: "No classes set up — create classes in the Classes section.", c: "amber" });
+        if (sc > 0) newAlerts.push({ id: 5, t: `${sc} student${sc > 1 ? "s" : ""} currently enrolled.`, c: "mint" });
+        if (tc > 0) newAlerts.push({ id: 6, t: `${tc} faculty member${tc > 1 ? "s" : ""} added to the system.`, c: "mint" });
+        if (sbc > 0) newAlerts.push({ id: 7, t: `${sbc} active subject${sbc > 1 ? "s" : ""} this semester.`, c: "mint" });
+        setAlerts(newAlerts);
       })
-      .catch(console.error);
+      .catch(console.error)
+      .finally(() => setLoading(false));
   }, []);
 
-  const dismissAlert = (id) => {
-    setAlerts(alerts.filter(a => a.id !== id));
-  };
+  const dismissAlert = (id) => setAlerts(alerts.filter(a => a.id !== id));
+
+  // Build subject chart from real subjects data
+  const subjectChart = subjects.slice(0, 6).map(s => ({
+    name: (s.name || s.code || "Subject").slice(0, 10),
+    credits: s.credits || 3,
+  }));
 
   return (
     <div>
       <SecHead title="Admin Dashboard" sub="System-wide overview of Motihari College of Engineering" action={<Tag color="mint">● All Systems Operational</Tag>} />
+
+      {/* STAT CARDS — real data, no fee */}
       <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:14, marginBottom:20 }}>
-        <Stat icon="👨‍🎓" label="Total Students"  value={stats.totalStudents} sub="+12 this month"  gradient={GR.violet} />
-        <Stat icon="👨‍🏫" label="Total Teachers" value={stats.totalTeachers}   sub="7 departments"   gradient={GR.amber}  />
-        <Stat icon="📚"   label="Subjects Active" value={stats.subjectsActive}    sub="This semester"   gradient={GR.coral}  />
-        <Stat icon="💳"   label="Fee Collection"  value={stats.feeCollection} sub="94% recovery"   gradient={GR.mint}   />
+        <Stat icon="👨‍🎓" label="Total Students"  value={loading ? "…" : stats.totalStudents} sub="Enrolled in system"   gradient={GR.violet} />
+        <Stat icon="👨‍🏫" label="Total Teachers" value={loading ? "…" : stats.totalTeachers}  sub="Verified faculty"     gradient={GR.amber}  />
+        <Stat icon="📚"  label="Active Subjects" value={loading ? "…" : stats.totalSubjects}  sub="This semester"        gradient={GR.coral}  />
+        <Stat icon="🏫"  label="Total Classes"   value={loading ? "…" : stats.totalClasses}   sub="Across all branches"  gradient={GR.mint}   />
       </div>
+
       <div style={{ display:"grid", gridTemplateColumns:"1.3fr 1fr", gap:14, marginBottom:14 }}>
+        {/* SUBJECTS CHART — real data */}
         <Card>
-          <div style={{ fontSize:14.5, fontWeight:800, color:T.dark, marginBottom:14 }}>Department Performance</div>
-          <ResponsiveContainer width="100%" height={200}>
-            <BarChart data={DEPT_CHART} barSize={32}>
-              <XAxis dataKey="dept" tick={{ fontSize:12, fill:T.muted }}/><YAxis domain={[70,100]} tick={{ fontSize:11, fill:T.muted }}/><Tooltip cursor={{ fill:T.violet+"11" }}/>
-              <Bar dataKey="avg" radius={[6,6,0,0]}>{DEPT_CHART.map((_,i)=><Cell key={i} fill={[T.violet,T.amber,T.coral,T.mint][i]}/>)}</Bar>
-            </BarChart>
-          </ResponsiveContainer>
+          <div style={{ fontSize:14.5, fontWeight:800, color:T.dark, marginBottom:14 }}>Active Subjects</div>
+          {subjectChart.length === 0 ? (
+            <div style={{ textAlign:"center", padding:"40px 20px", color:T.muted }}>
+              <div style={{ fontSize:36, marginBottom:8 }}>📚</div>
+              <div style={{ fontWeight:600, fontSize:13 }}>No subjects added yet.</div>
+              <div style={{ fontSize:12, marginTop:4 }}>Go to <b>Subjects</b> to add courses.</div>
+            </div>
+          ) : (
+            <ResponsiveContainer width="100%" height={200}>
+              <BarChart data={subjectChart} barSize={32}>
+                <XAxis dataKey="name" tick={{ fontSize:11, fill:T.muted }} />
+                <YAxis tick={{ fontSize:11, fill:T.muted }} />
+                <Tooltip formatter={(v) => [`${v} Credits`, "Credits"]} />
+                <Bar dataKey="credits" radius={[6,6,0,0]}>
+                  {subjectChart.map((_,i) => <Cell key={i} fill={[T.violet,T.amber,T.coral,T.mint,T.cyan,T.violetL][i % 6]} />)}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          )}
         </Card>
+
+        {/* QUICK ACTIONS — no fee */}
         <Card>
           <div style={{ fontSize:14.5, fontWeight:800, color:T.dark, marginBottom:14 }}>Quick Actions</div>
-          {[["➕","Add New Student","violet","students"],["👨‍🏫","Add New Teacher","amber","teachers"],["📅","Update Timetable","mint","timetable"],["📢","Post Announcement","coral","noticeboard"],["📊","Generate Reports","cyan","analytics"],["💳","View Fee Status","violet","fees"]].map(([ic,l,c,dest])=>(
-            <button key={l} onClick={() => onNavigate && onNavigate(dest)} style={{ width:"100%", display:"flex", alignItems:"center", gap:10, padding:"9px 12px", borderRadius:10, border:`1.5px solid ${T.border}`, background:T.bg, cursor:"pointer", marginBottom:7, color:T.dark, fontSize:13.5, fontWeight:600, fontFamily:"inherit", textAlign:"left", transition:"0.2s" }}>
+          {[
+            ["➕","Add New Student",  "students"],
+            ["👨‍🏫","Add New Teacher",  "teachers"],
+            ["🏫","Manage Classes",   "classes"],
+            ["📚","Add Subject",      "subjects"],
+            ["📅","Update Timetable", "timetable"],
+            ["📢","Post Announcement","noticeboard"],
+          ].map(([ic, l, dest]) => (
+            <button key={l} onClick={() => onNavigate && onNavigate(dest)}
+              style={{ width:"100%", display:"flex", alignItems:"center", gap:10, padding:"9px 12px", borderRadius:10, border:`1.5px solid ${T.border}`, background:T.bg, cursor:"pointer", marginBottom:7, color:T.dark, fontSize:13.5, fontWeight:600, fontFamily:"inherit", textAlign:"left", transition:"0.2s" }}>
               <span style={{ fontSize:16 }}>{ic}</span>{l}
             </button>
           ))}
         </Card>
       </div>
+
+      {/* SUBJECTS LIST + ALERTS */}
       <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:14 }}>
         <Card>
-          <div style={{ fontSize:14.5, fontWeight:800, color:T.dark, marginBottom:14 }}>Monthly Attendance Trend</div>
-          <ResponsiveContainer width="100%" height={180}>
-            <AreaChart data={ATTENDANCE_CHART}><XAxis dataKey="month" tick={{ fontSize:12, fill:T.muted }}/><YAxis tick={{ fontSize:11, fill:T.muted }}/><Tooltip/>
-              <Area type="monotone" dataKey="present" stroke={T.mint} fill={T.mint+"22"} strokeWidth={2}/>
-              <Area type="monotone" dataKey="absent"  stroke={T.coral} fill={T.coral+"22"} strokeWidth={2}/>
-            </AreaChart>
-          </ResponsiveContainer>
+          <div style={{ fontSize:14.5, fontWeight:800, color:T.dark, marginBottom:14 }}>Recent Subjects</div>
+          {subjects.length === 0 ? (
+            <div style={{ textAlign:"center", padding:"30px", color:T.muted, fontSize:13 }}>No subjects added yet.</div>
+          ) : (
+            subjects.slice(0, 5).map((s, i) => (
+              <div key={s._id || i} style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"9px 0", borderBottom:`1px solid ${T.border}` }}>
+                <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+                  <div style={{ width:34, height:34, borderRadius:8, background:[GR.violet,GR.amber,GR.coral,GR.mint,GR.cyan][i%5], display:"flex", alignItems:"center", justifyContent:"center", fontSize:16 }}>📖</div>
+                  <div>
+                    <div style={{ fontSize:13.5, fontWeight:700, color:T.dark }}>{s.name || s.code}</div>
+                    <div style={{ fontSize:11.5, color:T.muted }}>{s.dept || "—"} · {s.sem || "—"} Sem</div>
+                  </div>
+                </div>
+                <Tag color="violet">{s.credits || 0} Cr</Tag>
+              </div>
+            ))
+          )}
         </Card>
+
         <Card>
           <div style={{ fontSize:14.5, fontWeight:800, color:T.dark, marginBottom:14, display:"flex", justifyContent:"space-between" }}>
-            Recent Alerts 
+            System Alerts
             {alerts.length > 0 && <span style={{ fontSize:11, background:T.coral, color:"#fff", padding:"2px 6px", borderRadius:10 }}>{alerts.length}</span>}
           </div>
           {alerts.length === 0 ? (
-            <div style={{ textAlign:"center", padding:"30px", color:T.muted, fontSize:13 }}>No recent alerts. You're all caught up!</div>
+            <div style={{ textAlign:"center", padding:"30px", color:T.muted, fontSize:13 }}>No alerts. Everything looks good! ✅</div>
           ) : (
-            alerts.map((a)=>(
+            alerts.map(a => (
               <div key={a.id} style={{ display:"flex", justifyContent:"space-between", gap:10, alignItems:"flex-start", padding:"9px 0", borderBottom:`1px solid ${T.border}` }}>
                 <div style={{ display:"flex", gap:10, alignItems:"flex-start" }}>
-                  <div style={{ width:9, height:9, borderRadius:"50%", background:{coral:T.danger,warning:T.warning,amber:T.amber,mint:T.success}[a.c], flexShrink:0, marginTop:5 }}/>
+                  <div style={{ width:9, height:9, borderRadius:"50%", background:{coral:T.danger,warning:T.warning,amber:T.amber,mint:T.success}[a.c]||T.muted, flexShrink:0, marginTop:5 }} />
                   <span style={{ fontSize:13.5, color:T.dark }}>{a.t}</span>
                 </div>
                 <button onClick={() => dismissAlert(a.id)} style={{ background:"transparent", border:"none", cursor:"pointer", color:T.muted, fontSize:14 }}>×</button>
@@ -1049,6 +1099,7 @@ function AdminOverview({ onNavigate }) {
     </div>
   );
 }
+
 
 /* ══════════════════════════════════════════════════════
    ADMIN STUDENTS
@@ -1520,7 +1571,7 @@ function AdminSubjects() {
    TIMETABLE
 ══════════════════════════════════════════════════════ */
 function TimetableView() {
-  const dayColors={Monday:T.violet,Tuesday:T.coral,Wednesday:T.mint,Thursday:T.amber,Friday:T.cyan};
+  const dayColors={Monday:T.violet,Tuesday:T.coral,Wednesday:T.mint,Thursday:T.amber,Friday:T.cyan,Saturday:T.violetL};
   
   const [department, setDepartment] = useState("CSE-AI");
   const [semester, setSemester] = useState("7th");
@@ -1532,7 +1583,8 @@ function TimetableView() {
       Tuesday:   ["DBMS", "OS", "Free", "AI Lab", "AI Lab", "Free"],
       Wednesday: ["ML", "DS", "Free", "Seminar", "Seminar", "Free"],
       Thursday:  ["AI", "DBMS Lab", "DBMS Lab", "OS", "Free", "Free"],
-      Friday:    ["ML", "DSA", "Free", "Project", "Project", "Free"]
+      Friday:    ["ML", "DSA", "Free", "Project", "Project", "Free"],
+      Saturday:  ["Free", "Free", "Free", "Free", "Free", "Free"]
     }
   });
 
@@ -1547,14 +1599,14 @@ function TimetableView() {
 
   const currentKey = `${department}-${semester}`;
   const currentTimetable = timetables[currentKey] || {
-    Monday: Array(6).fill(""), Tuesday: Array(6).fill(""), Wednesday: Array(6).fill(""), Thursday: Array(6).fill(""), Friday: Array(6).fill("")
+    Monday: Array(6).fill(""), Tuesday: Array(6).fill(""), Wednesday: Array(6).fill(""), Thursday: Array(6).fill(""), Friday: Array(6).fill(""), Saturday: Array(6).fill("")
   };
 
   const handleSlotChange = (day, slotIndex, value) => {
     setTimetables(prev => {
       const updated = { ...prev };
       if (!updated[currentKey]) {
-        updated[currentKey] = { Monday: Array(6).fill(""), Tuesday: Array(6).fill(""), Wednesday: Array(6).fill(""), Thursday: Array(6).fill(""), Friday: Array(6).fill("") };
+        updated[currentKey] = { Monday: Array(6).fill(""), Tuesday: Array(6).fill(""), Wednesday: Array(6).fill(""), Thursday: Array(6).fill(""), Friday: Array(6).fill(""), Saturday: Array(6).fill("") };
       }
       updated[currentKey] = { ...updated[currentKey] };
       updated[currentKey][day] = [...(updated[currentKey][day] || Array(6).fill(""))];
@@ -1602,7 +1654,7 @@ function TimetableView() {
         </div>
       </Card>
 
-      <div style={{ display:"grid", gridTemplateColumns:"repeat(5,1fr)", gap:12 }}>
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(6,1fr)", gap:12 }}>
         {Object.keys(dayColors).map(day => (
           <Card key={day} style={{ padding:16, borderTop:`4px solid ${dayColors[day]||T.violet}` }}>
             <div style={{ fontSize:14, fontWeight:800, color:dayColors[day]||T.violet, marginBottom:12, textTransform:"uppercase", letterSpacing:"0.08em" }}>{day}</div>
@@ -1636,100 +1688,166 @@ function TimetableView() {
 function TeacherOverview({ user }) {
   const [classes, setClasses] = useState([]);
   const [students, setStudents] = useState([]);
-  const [stats, setStats] = useState({ totalStudents: 0, classCount: 0, examsHeld: 0, assignments: 0 });
-  const [adminName, setAdminName] = useState("Unassigned");
+  const [assignments, setAssignments] = useState([]);
+  const [subjects, setSubjects] = useState([]);
+  const [adminName, setAdminName] = useState("Pending Admin Approval");
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const fetchTeacherData = async () => {
-      try {
-        const token = localStorage.getItem("token");
-        const headers = { "Authorization": `Bearer ${token}` };
-        
-        const [clsRes, stuRes, teacherRes] = await Promise.all([
-          fetch("http://localhost:5001/classes", { headers }),
-          fetch("http://localhost:5001/students", { headers }),
-          fetch("http://localhost:5001/teachers", { headers })
-        ]);
+    const token = localStorage.getItem("token");
+    const h = { "Authorization": `Bearer ${token}` };
 
-        const clsData = await clsRes.json();
-        const stuData = await stuRes.json();
-        const teacherData = await teacherRes.json();
+    Promise.all([
+      fetch("http://localhost:5001/classes",     { headers: h }).then(r => r.json()),
+      fetch("http://localhost:5001/students",    { headers: h }).then(r => r.json()),
+      fetch("http://localhost:5001/teachers",    { headers: h }).then(r => r.json()),
+      fetch("http://localhost:5001/assignments", { headers: h }).then(r => r.json()),
+      fetch("http://localhost:5001/subjects",    { headers: h }).then(r => r.json()),
+    ])
+      .then(([clsData, stuData, teacherData, asgData, subjData]) => {
+        const myClasses     = Array.isArray(clsData)    ? clsData    : [];
+        const myStudents    = Array.isArray(stuData)    ? stuData    : [];
+        const myAssignments = Array.isArray(asgData)    ? asgData    : [];
+        const mySubjects    = Array.isArray(subjData)   ? subjData   : [];
 
-        let adminUsername = "Unassigned (Pending Admin Approval)";
+        // Resolve admin name from teacher profile
         if (Array.isArray(teacherData) && teacherData.length > 0) {
           const myProfile = teacherData.find(t => t.name === user.username) || teacherData[0];
-          if (myProfile && myProfile.adminId) {
-            adminUsername = myProfile.adminId.name || myProfile.adminId.username || adminUsername;
+          if (myProfile?.adminId) {
+            setAdminName(myProfile.adminId.name || myProfile.adminId.username || "Admin");
           }
         }
-        setAdminName(adminUsername);
-
-        // Classes are already filtered by backend to this teacher only
-        const myClasses = Array.isArray(clsData) ? clsData : [];
-        // Students are already filtered by backend to teacherId = this teacher
-        const myStudents = Array.isArray(stuData) ? stuData : [];
 
         setClasses(myClasses);
         setStudents(myStudents);
-        setStats({
-          classCount: myClasses.length,
-          totalStudents: myStudents.length,
-          examsHeld: Math.floor(myClasses.length * 1.5) || 2,
-          assignments: myClasses.length * 3 || 5
-        });
-      } catch (err) {
-        console.error("Error fetching teacher dashboard data:", err);
-      }
-    };
-    fetchTeacherData();
+        setAssignments(myAssignments);
+        setSubjects(mySubjects);
+      })
+      .catch(err => console.error("Teacher dashboard error:", err))
+      .finally(() => setLoading(false));
   }, [user]);
+
+  // Calculate real avg attendance across my students
+  const avgAttendance = students.length > 0
+    ? Math.round(students.reduce((sum, s) => sum + (Number(s.attendance) || 0), 0) / students.length)
+    : 0;
+
+  // Pending assignments (no submissions yet or fewer than student count)
+  const pendingReview = assignments.filter(a => (a.submissions || []).length < students.length).length;
 
   return (
     <div>
-      <SecHead title={`Welcome, ${user.name.split(" ")[1]||user.name} 👋`} sub={`Here's your teaching summary. Managed by Admin: ${adminName}`} />
+      <SecHead
+        title={`Welcome, ${user.name.split(" ")[0]} 👋`}
+        sub={`Your teaching summary · Managed by Admin: ${adminName}`}
+      />
+
+      {/* STAT CARDS — all real */}
       <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:14, marginBottom:20 }}>
-        <Stat icon="👨‍🎓" label="My Students"     value={stats.totalStudents} sub={`${stats.classCount} classes assigned`}       gradient={GR.violet} />
-        <Stat icon="📝"   label="Assignments"    value={stats.assignments}   sub={`${Math.max(1,Math.floor(stats.assignments/3))} pending review`} gradient={GR.amber}  />
-        <Stat icon="🧪"   label="Exams Held"     value={stats.examsHeld}    sub="This semester"     gradient={GR.coral}  />
-        <Stat icon="⭐"   label="Avg Rating"     value="4.8"                sub="Student feedback"  gradient={GR.mint}   />
+        <Stat icon="👨‍🎓" label="My Students"   value={loading ? "…" : students.length}    sub={`${classes.length} class${classes.length !== 1 ? "es" : ""} assigned`} gradient={GR.violet} />
+        <Stat icon="📝"  label="Assignments"   value={loading ? "…" : assignments.length}  sub={`${pendingReview} pending review`}                                      gradient={GR.amber}  />
+        <Stat icon="🏫"  label="My Classes"    value={loading ? "…" : classes.length}      sub="Active this semester"                                                    gradient={GR.coral}  />
+        <Stat icon="✅"  label="Avg Attendance" value={loading ? "…" : `${avgAttendance}%`} sub="Across all students"                                                    gradient={GR.mint}   />
       </div>
+
       <div style={{ display:"grid", gridTemplateColumns:"1.3fr 1fr", gap:14 }}>
+        {/* My Students list — real */}
         <Card>
-          <div style={{ fontSize:14.5, fontWeight:800, color:T.dark, marginBottom:14 }}>Recent Submissions</div>
+          <div style={{ fontSize:14.5, fontWeight:800, color:T.dark, marginBottom:14 }}>My Students</div>
           {students.length === 0 ? (
-            <div style={{ textAlign:"center", padding:"30px", color:T.muted, fontSize:13 }}>No students added yet. Add students from the Students section.</div>
+            <div style={{ textAlign:"center", padding:"30px", color:T.muted, fontSize:13 }}>
+              <div style={{ fontSize:36, marginBottom:8 }}>👨‍🎓</div>
+              No students assigned yet.
+            </div>
           ) : (
-            students.slice(0, 4).map((s,i)=>(
-              <div key={i} style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"10px 0", borderBottom:`1px solid ${T.border}` }}>
-                <div style={{ display:"flex", alignItems:"center", gap:10 }}>
-                  {avi(s.name,32)}
-                  <div><div style={{ fontSize:13.5, fontWeight:700, color:T.dark }}>{s.name}</div><div style={{ fontSize:11.5, color:T.muted }}>Assignment from {s.class}</div></div>
+            students.slice(0, 5).map((s, i) => {
+              const att = Number(s.attendance) || 0;
+              return (
+                <div key={s._id || i} style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"10px 0", borderBottom:`1px solid ${T.border}` }}>
+                  <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+                    {avi(s.name, 32)}
+                    <div>
+                      <div style={{ fontSize:13.5, fontWeight:700, color:T.dark }}>{s.name}</div>
+                      <div style={{ fontSize:11.5, color:T.muted }}>{s.branch || s.class || "—"} · Sem {s.semester || "—"}</div>
+                    </div>
+                  </div>
+                  <div style={{ display:"flex", gap:6, alignItems:"center" }}>
+                    <Tag color={att >= 75 ? "mint" : "coral"}>{att}% att.</Tag>
+                    {s.gpa ? <Tag color="violet">GPA {s.gpa}</Tag> : null}
+                  </div>
                 </div>
-                <div style={{ display:"flex", gap:6 }}><Tag color={i%3===0?"warning":"mint"}>{i%3===0?"Late":"Submitted"}</Tag><Tag color="violet">{Number(s.gpa)>=8?"A":Number(s.gpa)>=7?"B+":"Pending"}</Tag></div>
+              );
+            })
+          )}
+          {students.length > 5 && (
+            <div style={{ textAlign:"center", marginTop:10, fontSize:12.5, color:T.muted }}>
+              +{students.length - 5} more students — go to Students tab to view all.
+            </div>
+          )}
+        </Card>
+
+        {/* My Classes — real */}
+        <Card>
+          <div style={{ fontSize:14.5, fontWeight:800, color:T.dark, marginBottom:14 }}>My Classes</div>
+          {classes.length === 0 ? (
+            <div style={{ textAlign:"center", padding:"30px", color:T.muted, fontSize:13 }}>
+              <div style={{ fontSize:36, marginBottom:8 }}>🏫</div>
+              No classes assigned yet.
+            </div>
+          ) : (
+            classes.slice(0, 4).map((c, i) => (
+              <div key={c._id || i} style={{ display:"flex", gap:12, padding:"10px 12px", background:T.bg, borderRadius:10, marginBottom:8, alignItems:"center", borderLeft:`3px solid ${[T.violet,T.coral,T.mint,T.amber][i%4]}` }}>
+                <div style={{ flex:1 }}>
+                  <div style={{ fontSize:13.5, fontWeight:700, color:T.dark }}>{c.name}</div>
+                  <div style={{ fontSize:11.5, color:T.muted, marginTop:2 }}>
+                    📚 {c.subject || "—"} · 🌿 {c.branch || "—"} · Room {c.room || "TBA"}
+                  </div>
+                </div>
+                <Tag color={["violet","coral","mint","amber"][i%4]}>Sem {c.semester || "—"}</Tag>
               </div>
             ))
           )}
+          {classes.length > 4 && (
+            <div style={{ textAlign:"center", marginTop:6, fontSize:12.5, color:T.muted }}>
+              +{classes.length - 4} more classes
+            </div>
+          )}
         </Card>
+      </div>
+
+      {/* MY SUBJECTS — real, assigned by admin */}
+      <div style={{ marginTop:14 }}>
         <Card>
-          <div style={{ fontSize:14.5, fontWeight:800, color:T.dark, marginBottom:14 }}>Today's Schedule</div>
-          {classes.length === 0 ? (
-            <div style={{ textAlign:"center", padding:"30px", color:T.muted, fontSize:13 }}>No classes scheduled for today.</div>
+          <div style={{ fontSize:14.5, fontWeight:800, color:T.dark, marginBottom:14 }}>
+            My Subjects
+            <span style={{ fontSize:12, fontWeight:500, color:T.muted, marginLeft:8 }}>Assigned by admin</span>
+          </div>
+          {subjects.length === 0 ? (
+            <div style={{ textAlign:"center", padding:"30px", color:T.muted, fontSize:13 }}>
+              <div style={{ fontSize:36, marginBottom:8 }}>📚</div>
+              No subjects assigned to you yet. Ask your admin to assign subjects.
+            </div>
           ) : (
-            classes.slice(0, 3).map((c,i)=>(
-              <div key={i} style={{ display:"flex", gap:12, padding:"10px 12px", background:T.bg, borderRadius:10, marginBottom:8, alignItems:"center" }}>
-                <div style={{ fontWeight:800, fontSize:12.5, color:T.violetD, minWidth:62 }}>{9 + i * 2}:00 AM</div>
-                <div style={{ flex:1 }}>
-                  <div style={{ fontSize:13.5, fontWeight:700, color:T.dark }}>{c.name} — Room {c.room}</div>
+            <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:12 }}>
+              {subjects.map((s, i) => (
+                <div key={s._id || i} style={{ background:T.bg, borderRadius:12, padding:"14px 16px", borderLeft:`4px solid ${[T.violet,T.coral,T.mint,T.amber,T.cyan,T.violetL][i%6]}` }}>
+                  <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:6 }}>
+                    <div style={{ fontSize:13.5, fontWeight:800, color:T.dark }}>{s.name}</div>
+                    <Tag color="violet">{s.credits} Cr</Tag>
+                  </div>
+                  <div style={{ fontSize:11.5, color:T.muted }}>
+                    📋 {s.code} · 🌿 {s.dept || "—"} · Sem {s.sem || "—"}
+                  </div>
                 </div>
-                <Tag color={i%2===0?"violet":"amber"}>{i%2===0?"Lecture":"Lab"}</Tag>
-              </div>
-            ))
+              ))}
+            </div>
           )}
         </Card>
       </div>
     </div>
   );
 }
+
 
 /* ══════════════════════════════════════════════════════
    ATTENDANCE

@@ -268,13 +268,36 @@ app.get("/classes", verifyToken, async (req, res) => {
         return res.status(403).json({ error: "NOT_VERIFIED", message: "You are not yet verified by an admin." })
       }
       const userRecord = await User.findById(req.user.id)
-      query = { adminId: profile.adminId, teacher: userRecord.username }
+      // Match any of: Teacher profile name, login username, or display name
+      // (handles cases where admin stored different variants when creating the class)
+      const possibleNames = [...new Set([
+        profile.name,
+        userRecord.username,
+        userRecord.name
+      ].filter(Boolean))]
+      console.log(`[Classes] Teacher lookup for userId=${req.user.id}, trying names:`, possibleNames)
+      query = { adminId: profile.adminId, teacher: { $in: possibleNames } }
     }
     const classes = await Class.find(query)
     res.json(classes)
   } catch (error) {
     res.status(500).json({ error: error.message })
   }
+})
+
+// DEBUG: inspect what teacher names are stored in class documents
+app.get("/debug/classes", verifyToken, async (req, res) => {
+  try {
+    const userRecord = await User.findById(req.user.id)
+    const profile = await Teacher.findOne({ name: userRecord.username })
+    const allClasses = await Class.find({ adminId: profile?.adminId })
+    res.json({
+      myUsername: userRecord.username,
+      myName: userRecord.name,
+      profileName: profile?.name,
+      allClassesTeacherFields: allClasses.map(c => ({ id: c._id, className: c.name, teacherField: c.teacher }))
+    })
+  } catch (e) { res.status(500).json({ error: e.message }) }
 })
 
 app.post("/classes", verifyToken, authorizeRoles('admin'), async (req, res) => {
@@ -351,7 +374,10 @@ app.get("/subjects", verifyToken, async (req, res) => {
     } else if (req.user.role === 'teacher') {
       const profile = await getVerifiedTeacherProfile(req.user.id)
       if (!profile) return res.status(403).json({ error: "NOT_VERIFIED", message: "Not verified by admin" })
-      query = { adminId: profile.adminId }
+      const userRecord = await User.findById(req.user.id)
+      // Use profile.name — this matches what's stored in the subject's teacher field
+      const teacherName = profile.name || userRecord.username
+      query = { adminId: profile.adminId, teacher: teacherName }
     }
     const subjects = await Subject.find(query)
     res.json(subjects)
