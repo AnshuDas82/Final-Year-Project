@@ -1274,6 +1274,7 @@ function TeacherStudents() {
   const [q, setQ] = useState("");
   const [students, setStudents] = useState([]);
   const [error, setError] = useState("");
+  const [selected, setSelected] = useState(null);
 
   const fetchStudents = () => {
     fetch("http://localhost:5001/students", {
@@ -1302,6 +1303,63 @@ function TeacherStudents() {
 
   return (
     <div>
+      {/* STUDENT DETAIL MODAL */}
+      {selected && (
+        <div onClick={() => setSelected(null)} style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.55)", zIndex:1000, display:"flex", alignItems:"center", justifyContent:"center", padding:20 }}>
+          <div onClick={e => e.stopPropagation()} style={{ background:T.bgCard, borderRadius:18, padding:30, width:"100%", maxWidth:580, maxHeight:"90vh", overflowY:"auto", boxShadow:"0 24px 64px rgba(108,78,245,0.2)" }}>
+            {/* Modal Header */}
+            <div style={{ display:"flex", alignItems:"center", gap:14, marginBottom:22 }}>
+              {avi(selected.name, 52)}
+              <div style={{ flex:1 }}>
+                <div style={{ fontSize:20, fontWeight:800, color:T.dark }}>{selected.name}</div>
+                <div style={{ fontSize:13, color:T.muted, marginTop:3 }}>
+                  {selected.branch || "—"} · Semester {selected.semester || "—"}
+                </div>
+              </div>
+              <button onClick={() => setSelected(null)} style={{ background:"transparent", border:"none", cursor:"pointer", fontSize:22, color:T.muted }}>✕</button>
+            </div>
+
+            {/* Status Tags */}
+            <div style={{ display:"flex", gap:8, marginBottom:20 }}>
+              <Tag color={Number(selected.attendance) >= 75 ? "mint" : "coral"}>
+                Attendance: {selected.attendance || 0}%
+              </Tag>
+              {selected.gpa && <Tag color="violet">GPA: {selected.gpa}</Tag>}
+              <Tag color={Number(selected.attendance) >= 75 ? "mint" : "coral"}>
+                {Number(selected.attendance) >= 75 ? "✅ Safe" : "⚠️ Low Attendance"}
+              </Tag>
+            </div>
+
+            {/* Detail Grid */}
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
+              {[
+                ["👤 Roll No",            selected.rollNo              || "—"],
+                ["📋 Registration No",    selected.registrationNumber  || "—"],
+                ["🌿 Branch",             selected.branch              || "—"],
+                ["📅 Semester",           selected.semester            || "—"],
+                ["🎓 Batch",              selected.batch               || "—"],
+                ["🏫 Class",              selected.class               || "—"],
+                ["📧 Email",              selected.email               || "—"],
+                ["📞 Phone",              selected.phone               || "—"],
+                ["🎂 Date of Birth",      selected.dob                 || "—"],
+                ["📍 Address",            selected.address             || "—"],
+                ["📊 Attendance",         `${selected.attendance || 0}%`],
+                ["⭐ GPA",                selected.gpa                 || "—"],
+              ].map(([label, val]) => (
+                <div key={label} style={{ background:T.bg, borderRadius:10, padding:"11px 14px" }}>
+                  <div style={{ fontSize:11, color:T.muted, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.06em", marginBottom:4 }}>{label}</div>
+                  <div style={{ fontSize:14, fontWeight:700, color:T.dark, wordBreak:"break-word" }}>{val}</div>
+                </div>
+              ))}
+            </div>
+
+            <div style={{ marginTop:20, paddingTop:16, borderTop:`1px solid ${T.border}`, display:"flex", gap:8 }}>
+              <Btn v="ghost" sz="sm" onClick={() => setSelected(null)}>Close</Btn>
+            </div>
+          </div>
+        </div>
+      )}
+
       <SecHead title="My Students" sub={`${students.length} students in your records`} />
       <Card>
         <div style={{ display:"flex", gap:10, marginBottom:18 }}>
@@ -1330,7 +1388,9 @@ function TeacherStudents() {
                   <td style={{ padding:"12px 14px", fontSize:13 }}>{s.semester}</td>
                   <td style={{ padding:"12px 14px", fontSize:13, fontWeight:700, color:Number(s.attendance)>=75?T.success:T.danger }}>{s.attendance}%</td>
                   <td style={{ padding:"12px 14px", fontWeight:700 }}>{s.gpa}</td>
-                  <td style={{ padding:"12px 14px" }}><Btn v="ghost" sz="sm">View →</Btn></td>
+                  <td style={{ padding:"12px 14px" }}>
+                    <Btn v="ghost" sz="sm" onClick={() => setSelected(s)}>View →</Btn>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -2032,7 +2092,7 @@ function Gradebook() {
 function TeacherAssignments({ user }) {
   const [show, setShow] = useState(false);
   const [assignments, setAssignments] = useState([]);
-  const [newAssignment, setNewAssignment] = useState({ title: "", subject: "", deadline: "", description: "" });
+  const [newAssignment, setNewAssignment] = useState({ title: "", subject: "", deadline: "", description: "", branch: "", semester: "" });
   const [submission, setSubmission] = useState({});
 
   const fetchAssignments = async () => {
@@ -2052,7 +2112,7 @@ function TeacherAssignments({ user }) {
   }, []);
 
   const handleCreate = async () => {
-    if (!newAssignment.title || !newAssignment.deadline || !newAssignment.description) return alert("Please fill all required fields");
+    if (!newAssignment.title || !newAssignment.deadline || !newAssignment.description || !newAssignment.branch || !newAssignment.semester) return alert("Please fill all required fields including Branch and Semester");
     try {
       await fetch("http://localhost:5001/assignments", {
         method: "POST",
@@ -2063,7 +2123,7 @@ function TeacherAssignments({ user }) {
         body: JSON.stringify(newAssignment)
       });
       setShow(false);
-      setNewAssignment({ title: "", subject: "", deadline: "", description: "" });
+      setNewAssignment({ title: "", subject: "", deadline: "", description: "", branch: "", semester: "" });
       fetchAssignments();
     } catch (err) {
       console.error(err);
@@ -2103,16 +2163,40 @@ function TeacherAssignments({ user }) {
         <Card style={{ marginBottom: 14, borderLeft: `4px solid ${T.violet}` }}>
           <div style={{ fontSize: 15, fontWeight: 800, color: T.dark, marginBottom: 14 }}>Create New Assignment</div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
-            <Inp label="Title" value={newAssignment.title} onChange={(v) => setNewAssignment({ ...newAssignment, title: v })} placeholder="Assignment title" />
-            <Inp label="Subject" value={newAssignment.subject} onChange={(v) => setNewAssignment({ ...newAssignment, subject: v })} placeholder="e.g. Computer Science" />
-            <Inp label="Due Date" type="date" value={newAssignment.deadline} onChange={(v) => setNewAssignment({ ...newAssignment, deadline: v })} />
+            <Inp label="Title *" value={newAssignment.title} onChange={(v) => setNewAssignment({ ...newAssignment, title: v })} placeholder="Assignment title" />
+            <Inp label="Subject *" value={newAssignment.subject} onChange={(v) => setNewAssignment({ ...newAssignment, subject: v })} placeholder="e.g. Deep Learning" />
+            <Inp label="Due Date *" type="date" value={newAssignment.deadline} onChange={(v) => setNewAssignment({ ...newAssignment, deadline: v })} />
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 10 }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+              <label style={{ fontSize: 12.5, fontWeight: 700, color: T.dark }}>Assign to Branch *</label>
+              <select value={newAssignment.branch} onChange={e => setNewAssignment({ ...newAssignment, branch: e.target.value })}
+                style={{ padding: "10px 14px", border: `1.5px solid ${T.border}`, borderRadius: 10, fontSize: 13.5, fontFamily: "inherit", outline: "none" }}>
+                <option value="">-- Select Branch --</option>
+                <option value="CSE-AI">B.Tech CSE-AI</option>
+                <option value="CSE">B.Tech CSE</option>
+                <option value="IT">B.Tech IT</option>
+                <option value="ECE">B.Tech ECE</option>
+                <option value="All">All Branches</option>
+              </select>
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+              <label style={{ fontSize: 12.5, fontWeight: 700, color: T.dark }}>Assign to Semester *</label>
+              <select value={newAssignment.semester} onChange={e => setNewAssignment({ ...newAssignment, semester: e.target.value })}
+                style={{ padding: "10px 14px", border: `1.5px solid ${T.border}`, borderRadius: 10, fontSize: 13.5, fontFamily: "inherit", outline: "none" }}>
+                <option value="">-- Select Semester --</option>
+                {["1st","2nd","3rd","4th","5th","6th","7th","8th"].map(s => <option key={s} value={s}>{s} Semester</option>)}
+                <option value="All">All Semesters</option>
+              </select>
+            </div>
           </div>
           <div style={{ marginBottom: 14, marginTop: 10 }}>
-            <label style={{ display: "block", fontSize: 12.5, fontWeight: 700, color: T.dark, marginBottom: 5 }}>Description</label>
+            <label style={{ display: "block", fontSize: 12.5, fontWeight: 700, color: T.dark, marginBottom: 5 }}>Description *</label>
             <textarea value={newAssignment.description} onChange={(e) => setNewAssignment({ ...newAssignment, description: e.target.value })} rows={3} style={{ width: "100%", padding: "10px 14px", border: `1.5px solid ${T.border}`, borderRadius: 10, fontSize: 13.5, fontFamily: "inherit", resize: "vertical", boxSizing: "border-box", outline: "none" }} placeholder="Assignment instructions..." />
           </div>
           <div style={{ display: "flex", gap: 8 }}>
-            <Btn v="primary" sz="sm" onClick={handleCreate}>Publish</Btn>
+            <Btn v="primary" sz="sm" onClick={handleCreate}>Publish Assignment</Btn>
+            <Btn v="ghost" sz="sm" onClick={() => setShow(false)}>Cancel</Btn>
           </div>
         </Card>
       )}
@@ -2134,6 +2218,11 @@ function TeacherAssignments({ user }) {
                   <div>
                     <div style={{ fontSize: 15.5, fontWeight: 800, color: T.dark, marginBottom: 5 }}>{a.title}</div>
                     <div style={{ fontSize: 13, color: T.muted }}>📚 {a.subject} · 📅 Due: {a.deadline}</div>
+                    {(a.branch || a.semester) && (
+                      <div style={{ fontSize: 12, color: T.muted, marginTop: 2 }}>
+                        🎯 For: {a.branch || "All Branches"} · {a.semester || "All Semesters"} Sem
+                      </div>
+                    )}
                     <div style={{ fontSize: 13, marginTop: 8, color: T.dark }}>{a.description}</div>
                   </div>
                   <Tag color={status === "submitted" ? "mint" : status === "pending" ? "amber" : "violet"}>

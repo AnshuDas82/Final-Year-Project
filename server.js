@@ -375,9 +375,14 @@ app.get("/subjects", verifyToken, async (req, res) => {
       const profile = await getVerifiedTeacherProfile(req.user.id)
       if (!profile) return res.status(403).json({ error: "NOT_VERIFIED", message: "Not verified by admin" })
       const userRecord = await User.findById(req.user.id)
-      // Use profile.name — this matches what's stored in the subject's teacher field
-      const teacherName = profile.name || userRecord.username
-      query = { adminId: profile.adminId, teacher: teacherName }
+      // Match any possible name variant stored in the subject's teacher field
+      const possibleNames = [...new Set([
+        profile.name,
+        userRecord.username,
+        userRecord.name
+      ].filter(Boolean))]
+      console.log(`[Subjects] Teacher lookup for userId=${req.user.id}, trying names:`, possibleNames)
+      query = { adminId: profile.adminId, teacher: { $in: possibleNames } }
     }
     const subjects = await Subject.find(query)
     res.json(subjects)
