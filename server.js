@@ -9,6 +9,8 @@ import Class from "./models/Class.js"
 import Subject from "./models/Subject.js"
 import Assignment from "./models/Assignment.js"
 import Material from "./models/Material.js"
+import Test from "./models/Test.js"
+import TestSubmission from "./models/TestSubmission.js"
 import { verifyToken, authorizeRoles } from "./middleware/auth.js"
 
 const app = express()
@@ -168,6 +170,21 @@ app.post("/students", verifyToken, authorizeRoles('admin'), async (req, res) => 
     if (existing) return res.status(400).json({ message: "This student is already verified and added." })
     const student = new Student({ ...req.body, adminId: req.user.id, teacherId: null })
     await student.save()
+    res.json(student)
+  } catch (error) {
+    res.status(500).json({ error: error.message })
+  }
+})
+
+app.put("/students/:id", verifyToken, authorizeRoles('admin'), async (req, res) => {
+  try {
+    const { adminId, teacherId, attendanceRecords, ...updateFields } = req.body // prevent overwriting protected fields
+    const student = await Student.findOneAndUpdate(
+      { _id: req.params.id, adminId: req.user.id },
+      updateFields,
+      { new: true }
+    )
+    if (!student) return res.status(404).json({ message: "Student not found or access denied" })
     res.json(student)
   } catch (error) {
     res.status(500).json({ error: error.message })
@@ -545,3 +562,186 @@ app.delete("/materials/:id", verifyToken, authorizeRoles('teacher', 'admin'), as
   }
 })
 
+/* ══════════════════════════════════════════════════
+   TESTS
+══════════════════════════════════════════════════ */
+app.get("/tests", verifyToken, async (req, res) => {
+  try {
+    let query = {}
+    if (req.user.role === 'teacher') {
+      // Teachers see tests they created
+      query = { teacherId: req.user.id }
+      const tests = await Test.find(query).sort({ createdAt: -1 })
+      return res.json(tests)
+    } else if (req.user.role === 'student') {
+      const user = await User.findById(req.user.id)
+      const studentRecord = await Student.findOne({ name: user.username })
+      if (!studentRecord) return res.json([])
+      // Students see tests for their admin, semester, and branch
+      query = { 
+        adminId: studentRecord.adminId,
+        semester: studentRecord.semester,
+        branch: studentRecord.branch
+      }
+      
+      const tests = await Test.find(query).sort({ createdAt: -1 })
+      const submissions = await TestSubmission.find({ studentId: req.user.id })
+      const submittedTestIds = submissions.map(s => String(s.testId))
+      
+      const testsWithStatus = tests.map(t => {
+        const testObj = t.toObject()
+        if (submittedTestIds.includes(String(testObj._id))) {
+          testObj.isSubmitted = true
+          // attach the score info too
+          const sub = submissions.find(s => String(s.testId) === String(testObj._id))
+          if (sub) {
+            testObj.score = sub.totalScore
+            testObj.isGraded = sub.isGraded
+          }
+        }
+        return testObj
+      })
+      return res.json(testsWithStatus)
+    } else if (req.user.role === 'admin') {
+      // Admins see all tests in their institution
+      query = { adminId: req.user.id }
+      const tests = await Test.find(query).sort({ createdAt: -1 })
+      return res.json(tests)
+    }
+  } catch (error) {
+    res.status(500).json({ error: error.message })
+  }
+})
+
+app.post("/tests", verifyToken, authorizeRoles('teacher'), async (req, res) => {
+  try {
+    const profile = await getVerifiedTeacherProfile(req.user.id)
+    if (!profile) return res.status(403).json({ message: "Not verified" })
+    
+    // Calculate total marks based on questions
+    const totalTestMarks = req.body.questions.reduce((sum, q) => sum + Number(q.marks), 0)
+    
+    const newTest = new Test({
+      ...req.body,
+      totalTestMarks,
+      teacherId: req.user.id,
+      adminId: profile.adminId
+    })
+    await newTest.save()
+    res.json(newTest)
+  } catch (error) {
+    res.status(500).json({ error: error.message })
+  }
+})
+
+app.delete("/tests/:id", verifyToken, authorizeRoles('teacher', 'admin'), async (req, res) => {
+  try {
+    const test = await Test.findById(req.params.id)
+    if (!test) return res.status(404).json({ message: "Test not found" })
+    
+    if (req.user.role === 'teacher' && String(test.teacherId) !== String(req.user.id)) {
+      return res.status(403).json({ message: "You can only delete your own tests" })
+    }
+    
+    await Test.findByIdAndDelete(req.params.id)
+    await TestSubmission.deleteMany({ testId: req.params.id })
+    res.json({ message: "Test deleted successfully" })
+  } catch (error) {
+    res.status(500).json({ error: error.message })
+  }
+})
+
+app.post("/tests/:id/submit", verifyToken, authorizeRoles('student'), async (req, res) => {
+  try {
+    const existing = await TestSubmission.findOne({ testId: req.params.id, studentId: req.user.id })
+    if (existing) return res.status(400).json({ message: "You have already submitted this test" })
+
+    const test = await Test.findById(req.params.id)
+    if (!test) return res.status(404).json({ message: "Test not found" })
+
+    const user = await User.findById(req.user.id)
+
+    let totalScore = 0
+    let hasLongAnswer = false
+    
+    // Answers from frontend should be an array matching questions length
+    const answers = test.questions.map((q, i) => {
+      const studentAns = req.body.answers[i]
+      let marksAwarded = 0
+      
+      if (q.type === 'mcq') {
+        if (studentAns !== undefined && studentAns === q.correctOption) {
+          marksAwarded = q.marks
+        }
+      } else {
+        hasLongAnswer = true
+      }
+      
+      totalScore += marksAwarded
+      
+      return {
+        questionIndex: i,
+        selectedOption: q.type === 'mcq' ? studentAns : null,
+        textAnswer: q.type === 'long_answer' ? studentAns : "",
+        marksAwarded
+      }
+    })
+
+    const submission = new TestSubmission({
+      testId: test._id,
+      studentId: req.user.id,
+      studentName: user.name || user.username,
+      answers,
+      totalScore,
+      isGraded: !hasLongAnswer
+    })
+
+    await submission.save()
+    res.json(submission)
+  } catch (error) {
+    res.status(500).json({ error: error.message })
+  }
+})
+
+app.get("/tests/:id/submissions", verifyToken, authorizeRoles('teacher', 'admin'), async (req, res) => {
+  try {
+    const test = await Test.findById(req.params.id)
+    if (!test) return res.status(404).json({ message: "Test not found" })
+    
+    if (req.user.role === 'teacher' && String(test.teacherId) !== String(req.user.id)) {
+      return res.status(403).json({ message: "Not your test" })
+    }
+
+    const submissions = await TestSubmission.find({ testId: req.params.id })
+    res.json({ test, submissions })
+  } catch (error) {
+    res.status(500).json({ error: error.message })
+  }
+})
+
+app.put("/tests/submissions/:id/grade", verifyToken, authorizeRoles('teacher', 'admin'), async (req, res) => {
+  try {
+    const submission = await TestSubmission.findById(req.params.id)
+    if (!submission) return res.status(404).json({ message: "Submission not found" })
+
+    const { grades } = req.body // { questionIndex: marksAwarded, ... }
+    
+    let totalScore = 0
+    submission.answers.forEach((ans, i) => {
+      if (grades[i] !== undefined) {
+        ans.marksAwarded = Number(grades[i])
+      }
+      totalScore += ans.marksAwarded
+    })
+
+    submission.totalScore = totalScore
+    submission.isGraded = true
+    await submission.save()
+    res.json(submission)
+  } catch (error) {
+    res.status(500).json({ error: error.message })
+  }
+})
+
+const PORT = process.env.PORT || 5001
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`))

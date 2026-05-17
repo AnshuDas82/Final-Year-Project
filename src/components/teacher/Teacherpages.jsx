@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { Avatar, Tag, Card, SectionHeader, Button, Input, TableHead, ProgressBar, StatCard } from "../shared/Primitives";
-import { STUDENTS, GRADEBOOK, ASSIGNMENTS, MATERIALS, ATTENDANCE_CHART, PERF_CHART, RADAR_DATA } from "../../data/constants";
+import { STUDENTS, ASSIGNMENTS, MATERIALS, ATTENDANCE_CHART, PERF_CHART, RADAR_DATA } from "../../data/constants";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
   Cell, AreaChart, Area, RadarChart, Radar, PolarGrid, PolarAngleAxis
@@ -119,29 +119,92 @@ export function AttendanceMark() {
 }
 
 /* ── Gradebook ────────────────────────────────────────────────────────────── */
+function gpaToGrade(gpa) {
+  const g = parseFloat(gpa);
+  if (isNaN(g)) return "N/A";
+  if (g >= 9.5) return "A+";
+  if (g >= 9.0) return "A";
+  if (g >= 8.5) return "A-";
+  if (g >= 8.0) return "B+";
+  if (g >= 7.0) return "B";
+  if (g >= 6.0) return "B-";
+  if (g >= 5.0) return "C";
+  return "F";
+}
+const gradeColorMap = { "A+":"mint","A":"mint","A-":"cyan","B+":"violet","B":"amber","B-":"amber","C":"coral","F":"coral","N/A":"gray" };
+
 export function Gradebook() {
-  const gradeColor = { "A":"mint","A+":"mint","A-":"cyan","B+":"violet","B":"amber" };
+  const [students, setStudents] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [q, setQ] = useState("");
+
+  useEffect(() => {
+    fetch("http://localhost:5001/students", {
+      headers: { "Authorization": `Bearer ${localStorage.getItem("token")}` }
+    })
+      .then(r => r.json())
+      .then(d => { if (Array.isArray(d)) setStudents(d); })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  const list = students.filter(s =>
+    s.name?.toLowerCase().includes(q.toLowerCase()) ||
+    s.rollNo?.toLowerCase().includes(q.toLowerCase())
+  );
+
   return (
     <div>
-      <SectionHeader title="📒 Gradebook" sub="Subject-wise marks & grades for all students" action={<Button variant="ghost" size="sm">Export Excel</Button>} />
+      <SectionHeader
+        title="📒 Gradebook"
+        sub={`${students.length} students — real-time academic records`}
+        action={
+          <div style={{ display:"flex", gap:8, alignItems:"center" }}>
+            <input value={q} onChange={e => setQ(e.target.value)}
+              placeholder="🔍 Search student..."
+              style={{ padding:"7px 14px", border:"1.5px solid #E8E6F5", borderRadius:10, fontSize:13, outline:"none", width:200 }} />
+            <Button variant="ghost" size="sm">Export Excel</Button>
+          </div>
+        }
+      />
       <Card>
-        <table className="w-full border-collapse">
-          <TableHead cols={["Student","AI /100","ML /100","DSA /100","DBMS /100","OS /100","Total /500","Grade"]} />
-          <tbody>
-            {GRADEBOOK.map((g,i) => (
-              <tr key={i} className="border-b border-[#E8E6F5]">
-                <td className="px-3.5 py-3">
-                  <div className="flex items-center gap-2.5"><Avatar name={g.student} size="sm" /><span className="text-[13.5px] font-bold text-[#1A1540]">{g.student}</span></div>
-                </td>
-                {[g.AI,g.ML,g.DSA,g.DBMS,g.OS].map((v,j) => (
-                  <td key={j} className={`px-3.5 py-3 text-center font-bold text-[14px] ${v>=85?"text-[#10C98F]":v>=75?"text-[#4F38C2]":"text-[#FFAA00]"}`}>{v}</td>
-                ))}
-                <td className="px-3.5 py-3 font-extrabold text-[15px] text-[#1A1540]">{g.total}</td>
-                <td className="px-3.5 py-3"><Tag color={gradeColor[g.grade]||"violet"}>{g.grade}</Tag></td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        {loading ? (
+          <div style={{ textAlign:"center", padding:"40px 0", color:"#7B789E" }}>Loading gradebook...</div>
+        ) : list.length === 0 ? (
+          <div style={{ textAlign:"center", padding:"40px 0", color:"#7B789E" }}>No students found.</div>
+        ) : (
+          <table className="w-full border-collapse">
+            <TableHead cols={["Roll No","Student","Semester","Branch","Attendance","GPA","Grade","Status"]} />
+            <tbody>
+              {list.map((s) => {
+                const grade = gpaToGrade(s.gpa);
+                const gpa = parseFloat(s.gpa) || 0;
+                const att = parseFloat(s.attendance) || 0;
+                const gpaColor = gpa >= 8.5 ? "#10C98F" : gpa >= 7 ? "#4F38C2" : "#FFAA00";
+                const attColor = att >= 75 ? "#10C98F" : "#FF5757";
+                const statusLabel = att >= 75 && gpa >= 8 ? "Excellent" : gpa >= 7 ? "Good" : "At Risk";
+                const statusColor = att >= 75 && gpa >= 8 ? "mint" : gpa >= 7 ? "violet" : "coral";
+                return (
+                  <tr key={s._id} className="border-b border-[#E8E6F5]">
+                    <td className="px-3.5 py-3 font-bold text-[12.5px] text-[#7B789E]">{s.rollNo || s._id?.slice(-5)}</td>
+                    <td className="px-3.5 py-3">
+                      <div className="flex items-center gap-2.5">
+                        <Avatar name={s.name} size="sm" />
+                        <span className="text-[13.5px] font-bold text-[#1A1540]">{s.name}</span>
+                      </div>
+                    </td>
+                    <td className="px-3.5 py-3 text-[13px]">{s.semester || "N/A"}</td>
+                    <td className="px-3.5 py-3 text-[13px]">{s.branch || "N/A"}</td>
+                    <td className="px-3.5 py-3 font-bold text-[14px]" style={{ color: attColor }}>{att}%</td>
+                    <td className="px-3.5 py-3 font-extrabold text-[15px]" style={{ color: gpaColor }}>{gpa || "N/A"}</td>
+                    <td className="px-3.5 py-3"><Tag color={gradeColorMap[grade] || "gray"}>{grade}</Tag></td>
+                    <td className="px-3.5 py-3"><Tag color={statusColor}>{statusLabel}</Tag></td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
       </Card>
     </div>
   );
@@ -394,47 +457,183 @@ export function PerformanceView() {
 
 /* ── Online Tests ─────────────────────────────────────────────────────────── */
 export function OnlineTests() {
+  const [tests, setTests] = useState([]);
   const [show, setShow] = useState(false);
-  const tests = [
-    { title:"Mid-Term: Artificial Intelligence", class:"7th Sem CSE-AI", date:"Apr 12, 2025", dur:90, qs:30, status:"upcoming"  },
-    { title:"Unit Test: Data Structures",        class:"5th Sem CSE",   date:"Apr 05, 2025", dur:45, qs:15, status:"completed" },
-    { title:"Quiz: Machine Learning",            class:"7th Sem CSE-AI", date:"Apr 18, 2025", dur:30, qs:10, status:"upcoming"  },
-  ];
+  const [loading, setLoading] = useState(true);
+  
+  const [newTest, setNewTest] = useState({
+    title: "",
+    date: "",
+    duration: "",
+    semester: "",
+    branch: "",
+    questions: []
+  });
+
+  const [newQType, setNewQType] = useState("mcq");
+  const [newQWeight, setNewQWeight] = useState("");
+  const [newQTotal, setNewQTotal] = useState("");
+
+  const fetchTests = async () => {
+    try {
+      const token = localStorage.getItem("token");
+      const res = await fetch("http://localhost:5001/tests", {
+        headers: { "Authorization": `Bearer ${token}` }
+      });
+      const data = await res.json();
+      if (Array.isArray(data)) setTests(data);
+    } catch (error) {
+      console.error("Error fetching tests:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchTests();
+  }, []);
+
+  const handleAddQuestionType = () => {
+    if (!newQWeight || !newQTotal) return alert("Enter weightage and total marks for the question type.");
+    setNewTest(p => ({
+      ...p,
+      questions: [...p.questions, { type: newQType, weightage: Number(newQWeight), totalMarks: Number(newQTotal) }]
+    }));
+    setNewQWeight("");
+    setNewQTotal("");
+  };
+
+  const handleCreateTest = async () => {
+    if (!newTest.title || !newTest.date || !newTest.duration || !newTest.semester || !newTest.branch) {
+      return alert("Please fill all test details");
+    }
+    if (newTest.questions.length === 0) {
+      return alert("Please add at least one question type");
+    }
+    
+    try {
+      const token = localStorage.getItem("token");
+      const res = await fetch("http://localhost:5001/tests", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
+        body: JSON.stringify(newTest)
+      });
+      if (res.ok) {
+        setShow(false);
+        setNewTest({ title: "", date: "", duration: "", semester: "", branch: "", questions: [] });
+        fetchTests();
+      } else {
+        const err = await res.json();
+        alert("Failed to create test: " + err.message);
+      }
+    } catch (error) {
+      alert("Error: " + error.message);
+    }
+  };
+
+  const handleDeleteTest = async (id) => {
+    if (!window.confirm("Are you sure you want to delete this test?")) return;
+    try {
+      const token = localStorage.getItem("token");
+      const res = await fetch(`http://localhost:5001/tests/${id}`, {
+        method: "DELETE",
+        headers: { "Authorization": `Bearer ${token}` }
+      });
+      if (res.ok) {
+        fetchTests();
+      }
+    } catch (error) {
+      alert("Delete failed");
+    }
+  };
+
   return (
     <div>
       <SectionHeader title="Online Tests" sub="Create, schedule, and review exams" action={<Button variant="primary" size="sm" onClick={() => setShow(!show)}>+ Create Test</Button>} />
       {show && (
         <Card className="mb-3.5 border-l-4 border-l-[#6C4EF5]">
           <div className="text-[15px] font-extrabold text-[#1A1540] mb-3.5">Configure New Test</div>
-          <div className="grid grid-cols-3 gap-2.5">
-            <Input label="Test Title" value="" onChange={() => {}} placeholder="Test name" />
-            <Input label="Date & Time" type="datetime-local" value="" onChange={() => {}} />
-            <Input label="Duration (mins)" type="number" value="" onChange={() => {}} placeholder="60" />
+          
+          <div className="grid grid-cols-3 gap-2.5 mb-2.5">
+            <Input label="Test Title" value={newTest.title} onChange={v => setNewTest({...newTest, title: v})} placeholder="e.g. Mid-Term AI" />
+            <Input label="Date & Time" type="datetime-local" value={newTest.date} onChange={v => setNewTest({...newTest, date: v})} />
+            <Input label="Duration (mins)" type="number" value={newTest.duration} onChange={v => setNewTest({...newTest, duration: v})} placeholder="60" />
           </div>
+          
+          <div className="grid grid-cols-2 gap-2.5 mb-4">
+            <Input label="Semester" value={newTest.semester} onChange={v => setNewTest({...newTest, semester: v})} placeholder="e.g. 7th Sem" />
+            <Input label="Branch" value={newTest.branch} onChange={v => setNewTest({...newTest, branch: v})} placeholder="e.g. CSE-AI" />
+          </div>
+
+          <div className="border border-[#E8E6F5] rounded-[10px] p-3 mb-4 bg-[#F4F3FF]">
+            <div className="text-[13.5px] font-bold text-[#1A1540] mb-2.5">Add Question Types</div>
+            <div className="flex gap-2 items-end mb-3">
+              <div className="flex-1">
+                <label className="block text-[12.5px] font-bold text-[#1A1540] mb-1.5">Type</label>
+                <select value={newQType} onChange={e => setNewQType(e.target.value)} className="w-full px-3 py-2 border-[1.5px] border-[#E8E6F5] rounded-[10px] text-[13.5px] outline-none">
+                  <option value="mcq">MCQ</option>
+                  <option value="long_answer">Long Answer</option>
+                </select>
+              </div>
+              <div className="flex-1">
+                <Input label="Weightage (Marks per Q)" type="number" value={newQWeight} onChange={v => setNewQWeight(v)} placeholder="e.g. 2" />
+              </div>
+              <div className="flex-1">
+                <Input label="Total Marks for Type" type="number" value={newQTotal} onChange={v => setNewQTotal(v)} placeholder="e.g. 20" />
+              </div>
+              <Button variant="mint" size="sm" onClick={handleAddQuestionType}>+ Add</Button>
+            </div>
+            
+            {newTest.questions.length > 0 && (
+              <div className="mt-2">
+                <div className="text-[12.5px] font-bold text-[#7B789E] mb-1">Added Sections:</div>
+                {newTest.questions.map((q, idx) => (
+                  <div key={idx} className="flex justify-between items-center bg-white px-3 py-2 rounded-lg border border-[#E8E6F5] mb-1.5">
+                    <span className="text-[13px] font-medium text-[#1A1540]">{q.type === 'mcq' ? 'MCQ' : 'Long Answer'} - {q.weightage} marks each</span>
+                    <span className="text-[13px] font-bold text-[#6C4EF5]">Total: {q.totalMarks} marks</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
           <div className="flex gap-2">
-            <Button variant="primary" size="sm" onClick={() => setShow(false)}>Create Test</Button>
+            <Button variant="primary" size="sm" onClick={handleCreateTest}>Create Test</Button>
             <Button variant="ghost"   size="sm" onClick={() => setShow(false)}>Cancel</Button>
           </div>
         </Card>
       )}
-      <div className="flex flex-col gap-2.5">
-        {tests.map((t,i) => (
-          <Card key={i}>
-            <div className="flex justify-between items-start">
-              <div>
-                <div className="text-[15.5px] font-extrabold text-[#1A1540] mb-1.5">{t.title}</div>
-                <div className="text-[13px] text-[#7B789E]">👥 {t.class} · 📅 {t.date} · ⏱ {t.dur} mins · ❓ {t.qs} questions</div>
-              </div>
-              <Tag color={t.status==="completed"?"mint":"violet"}>{t.status}</Tag>
-            </div>
-            <div className="flex gap-2 mt-3">
-              {t.status==="completed" && <Button variant="ghost" size="sm">View Results</Button>}
-              <Button variant="ghost" size="sm">Preview</Button>
-              <Button variant="primary" size="sm">Manage</Button>
-            </div>
-          </Card>
-        ))}
-      </div>
+      
+      {loading ? (
+        <div className="text-center py-10 text-[#7B789E]">Loading tests...</div>
+      ) : tests.length === 0 ? (
+        <Card className="text-center py-10 text-[#7B789E]">No tests created yet.</Card>
+      ) : (
+        <div className="flex flex-col gap-2.5">
+          {tests.map((t) => {
+            const isUpcoming = new Date(t.date) > new Date();
+            const status = isUpcoming ? "upcoming" : "completed";
+            return (
+              <Card key={t._id}>
+                <div className="flex justify-between items-start">
+                  <div>
+                    <div className="text-[15.5px] font-extrabold text-[#1A1540] mb-1.5">{t.title}</div>
+                    <div className="text-[13px] text-[#7B789E]">
+                      👥 {t.semester} - {t.branch} · 📅 {new Date(t.date).toLocaleString()} · ⏱ {t.duration} mins
+                    </div>
+                    <div className="text-[12.5px] text-[#6C4EF5] font-bold mt-1">Total Marks: {t.totalTestMarks}</div>
+                  </div>
+                  <Tag color={status === "completed" ? "mint" : "violet"}>{status}</Tag>
+                </div>
+                <div className="flex gap-2 mt-3">
+                  {status === "completed" && <Button variant="ghost" size="sm">View Results</Button>}
+                  <Button variant="ghost" size="sm" onClick={() => handleDeleteTest(t._id)}><span className="text-[#FF5757]">Delete</span></Button>
+                </div>
+              </Card>
+            )
+          })}
+        </div>
+      )}
     </div>
   );
 }

@@ -1110,6 +1110,9 @@ function AdminStudents() {
   const [branchFilter, setBranchFilter] = useState("");
   const [students, setStudents] = useState([]);
   const [selectedStudent, setSelectedStudent] = useState(null);
+  const [editStudent, setEditStudent] = useState(null);
+  const [editForm, setEditForm] = useState({});
+  const [saving, setSaving] = useState(false);
 
   const fetchStudents = () => {
     fetch("http://localhost:5001/students", {
@@ -1121,6 +1124,31 @@ function AdminStudents() {
         else console.error("Error fetching students:", data);
       })
       .catch(err => console.log(err));
+  };
+
+  const openEdit = (s) => {
+    setEditStudent(s);
+    setEditForm({ name: s.name||"", rollNo: s.rollNo||"", branch: s.branch||"", semester: s.semester||"", email: s.email||"", phone: s.phone||"", dob: s.dob||"", address: s.address||"", gpa: s.gpa||"", attendance: s.attendance||"" });
+  };
+
+  const handleEditSave = async (e) => {
+    e.preventDefault();
+    setSaving(true);
+    try {
+      const res = await fetch(`http://localhost:5001/students/${editStudent._id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${localStorage.getItem("token")}` },
+        body: JSON.stringify(editForm)
+      });
+      const updated = await res.json();
+      if (res.ok) {
+        setStudents(prev => prev.map(s => s._id === updated._id ? updated : s));
+        setEditStudent(null);
+      } else {
+        alert(updated.message || "Update failed");
+      }
+    } catch (err) { console.error(err); alert("Network error"); }
+    finally { setSaving(false); }
   };
 
   useEffect(() => {
@@ -1197,6 +1225,36 @@ function AdminStudents() {
         </div>
       )}
 
+      {/* ── Edit Student Modal ── */}
+      {editStudent && (
+        <div style={{ position:"fixed", top:0, left:0, right:0, bottom:0, background:"rgba(0,0,0,0.55)", zIndex:1100, display:"flex", alignItems:"center", justifyContent:"center" }}>
+          <Card style={{ width:"92%", maxWidth:620, maxHeight:"92vh", overflowY:"auto" }}>
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:18 }}>
+              <div style={{ fontSize:17, fontWeight:800, color:T.dark }}>✏️ Edit Student</div>
+              <Btn v="ghost" sz="sm" onClick={() => setEditStudent(null)}>✕ Close</Btn>
+            </div>
+            <form onSubmit={handleEditSave}>
+              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:14, marginBottom:14 }}>
+                <Inp label="Student Name" value={editForm.name} onChange={v => setEditForm({...editForm, name:v})} />
+                <Inp label="Roll No" value={editForm.rollNo} onChange={v => setEditForm({...editForm, rollNo:v})} />
+                <Inp label="Branch" value={editForm.branch} onChange={v => setEditForm({...editForm, branch:v})} />
+                <Inp label="Semester" value={editForm.semester} onChange={v => setEditForm({...editForm, semester:v})} />
+                <Inp label="Email" value={editForm.email} onChange={v => setEditForm({...editForm, email:v})} />
+                <Inp label="Phone" value={editForm.phone} onChange={v => setEditForm({...editForm, phone:v})} />
+                <Inp label="DOB" type="date" value={editForm.dob} onChange={v => setEditForm({...editForm, dob:v})} />
+                <Inp label="Address" value={editForm.address} onChange={v => setEditForm({...editForm, address:v})} />
+                <Inp label="GPA" type="number" value={editForm.gpa} onChange={v => setEditForm({...editForm, gpa:v})} />
+                <Inp label="Attendance (%)" type="number" value={editForm.attendance} onChange={v => setEditForm({...editForm, attendance:v})} />
+              </div>
+              <div style={{ display:"flex", gap:8 }}>
+                <Btn type="submit" v="primary" sz="md" disabled={saving}>{saving ? "Saving…" : "Save Changes"}</Btn>
+                <Btn type="button" v="ghost" sz="sm" onClick={() => setEditStudent(null)}>Cancel</Btn>
+              </div>
+            </form>
+          </Card>
+        </div>
+      )}
+
       <AddStudentForm onAdd={fetchStudents} />
 
       <SecHead
@@ -1252,7 +1310,7 @@ function AdminStudents() {
                 <td style={{ padding: "12px 14px" }}>{s.attendance}%</td>
                 <td style={{ padding: "12px 14px", fontWeight: 700 }}>{s.gpa}</td>
                 <td style={{ padding: "12px 14px" }}><Tag color="mint">Active</Tag></td>
-                <td style={{ padding: "12px 14px" }}><Btn v="ghost" sz="sm" onClick={() => setSelectedStudent(s)}>View →</Btn></td>
+                <td style={{ padding: "12px 14px", display: "flex", gap: 6 }}><Btn v="ghost" sz="sm" onClick={() => setSelectedStudent(s)}>View →</Btn> <Btn v="primary" sz="sm" onClick={() => openEdit(s)}>✏️ Edit</Btn></td>
               </tr>
             ))}
             {list.length === 0 && (
@@ -2061,26 +2119,93 @@ function AttendanceMark() {
    GRADEBOOK
 ══════════════════════════════════════════════════════ */
 function Gradebook() {
-  const gradeColor={A:"mint","A+":"mint","A-":"cyan","B+":"violet","B":"amber","B-":"warning"};
+  const [students, setStudents] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [q, setQ] = useState("");
+
+  useEffect(() => {
+    fetch("http://localhost:5001/students", {
+      headers: { "Authorization": `Bearer ${localStorage.getItem("token")}` }
+    })
+      .then(r => r.json())
+      .then(d => { if (Array.isArray(d)) setStudents(d); })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  const list = students.filter(s =>
+    s.name?.toLowerCase().includes(q.toLowerCase()) ||
+    s.rollNo?.toLowerCase().includes(q.toLowerCase())
+  );
+
+  const gpaToGrade = (gpa) => {
+    const g = parseFloat(gpa);
+    if (isNaN(g)) return "N/A";
+    if (g >= 9.5) return "A+";
+    if (g >= 9.0) return "A";
+    if (g >= 8.5) return "A-";
+    if (g >= 8.0) return "B+";
+    if (g >= 7.0) return "B";
+    if (g >= 6.0) return "B-";
+    if (g >= 5.0) return "C";
+    return "F";
+  };
+  const gradeColorMap = { "A+":"mint","A":"mint","A-":"cyan","B+":"violet","B":"amber","B-":"amber","C":"coral","F":"coral","N/A":"gray" };
+
   return (
     <div>
-      <SecHead title="📒 Gradebook" sub="Subject-wise marks & grades for all students" action={<Btn v="ghost" sz="sm">Export Excel</Btn>}/>
+      <SecHead 
+        title="📒 Gradebook" 
+        sub={`${students.length} students — real-time academic records`}
+        action={
+          <div style={{ display:"flex", gap:8, alignItems:"center" }}>
+            <input value={q} onChange={e => setQ(e.target.value)}
+              placeholder="🔍 Search student..."
+              style={{ padding:"7px 14px", border:`1.5px solid ${T.border}`, borderRadius:10, fontSize:13, outline:"none", width:200, fontFamily:"inherit" }} />
+            <Btn v="ghost" sz="sm">Export Excel</Btn>
+          </div>
+        }
+      />
       <Card>
-        <table style={{ width:"100%", borderCollapse:"collapse" }}>
-          <THead cols={["Student","AI /100","ML /100","DSA /100","DBMS /100","OS /100","Total /500","Grade"]}/>
-          <tbody>
-            {GRADEBOOK.map((g,i)=>(
-              <tr key={i} style={{ borderBottom:`1px solid ${T.border}` }}>
-                <td style={{ padding:"12px 14px" }}><div style={{ display:"flex", alignItems:"center", gap:9 }}>{avi(g.student,32)}<span style={{ fontSize:13.5, fontWeight:700, color:T.dark }}>{g.student}</span></div></td>
-                {[g.AI,g.ML,g.DSA,g.DBMS,g.OS].map((v,j)=>(
-                  <td key={j} style={{ padding:"12px 14px", textAlign:"center", fontWeight:700, fontSize:14, color:v>=85?T.success:v>=75?T.violetD:T.warning }}>{v}</td>
-                ))}
-                <td style={{ padding:"12px 14px", fontWeight:800, fontSize:15, color:T.dark }}>{g.total}</td>
-                <td style={{ padding:"12px 14px" }}><Tag color={gradeColor[g.grade]||"violet"}>{g.grade}</Tag></td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        {loading ? (
+          <div style={{ textAlign:"center", padding:"40px 0", color:T.muted, fontSize: 13.5 }}>Loading gradebook...</div>
+        ) : list.length === 0 ? (
+          <div style={{ textAlign:"center", padding:"40px 0", color:T.muted, fontSize: 13.5 }}>No students found.</div>
+        ) : (
+          <div style={{ overflowX: "auto" }}>
+            <table style={{ width:"100%", borderCollapse:"collapse", minWidth: 600 }}>
+              <THead cols={["Roll No","Student","Semester","Branch","Attendance","GPA","Grade","Status"]} />
+              <tbody>
+                {list.map((s) => {
+                  const grade = gpaToGrade(s.gpa);
+                  const gpa = parseFloat(s.gpa) || 0;
+                  const att = parseFloat(s.attendance) || 0;
+                  const gpaColor = gpa >= 8.5 ? T.success : gpa >= 7 ? T.violetD : T.warning;
+                  const attColor = att >= 75 ? T.success : T.danger;
+                  const statusLabel = att >= 75 && gpa >= 8 ? "Excellent" : gpa >= 7 ? "Good" : "At Risk";
+                  const statusColor = att >= 75 && gpa >= 8 ? "mint" : gpa >= 7 ? "violet" : "coral";
+                  return (
+                    <tr key={s._id} style={{ borderBottom:`1px solid ${T.border}` }}>
+                      <td style={{ padding:"12px 14px", fontSize: 12.5, fontWeight: 700, color: T.muted }}>{s.rollNo || s._id?.slice(-5)}</td>
+                      <td style={{ padding:"12px 14px" }}>
+                        <div style={{ display:"flex", alignItems:"center", gap:9 }}>
+                          {avi(s.name, 32)}
+                          <span style={{ fontSize:13.5, fontWeight:700, color:T.dark }}>{s.name}</span>
+                        </div>
+                      </td>
+                      <td style={{ padding:"12px 14px", fontSize: 13, color: T.dark }}>{s.semester || "N/A"}</td>
+                      <td style={{ padding:"12px 14px", fontSize: 13, color: T.dark }}>{s.branch || "N/A"}</td>
+                      <td style={{ padding:"12px 14px", fontSize: 14, fontWeight: 700, color: attColor }}>{att}%</td>
+                      <td style={{ padding:"12px 14px", fontSize: 15, fontWeight: 800, color: gpaColor }}>{gpa || "N/A"}</td>
+                      <td style={{ padding:"12px 14px" }}><Tag color={gradeColorMap[grade] || "gray"}>{grade}</Tag></td>
+                      <td style={{ padding:"12px 14px" }}><Tag color={statusColor}>{statusLabel}</Tag></td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
       </Card>
     </div>
   );
@@ -2515,41 +2640,351 @@ function PerformanceView() {
    ONLINE TESTS (Teacher)
 ══════════════════════════════════════════════════════ */
 function OnlineTests() {
-  const [show,setShow]=useState(false);
-  const tests=[
-    {title:"Mid-Term: Artificial Intelligence",class:"7th Sem CSE-AI",date:"Apr 12, 2025",dur:90,qs:30,status:"upcoming"},
-    {title:"Unit Test: Data Structures",       class:"5th Sem CSE",   date:"Apr 05, 2025",dur:45,qs:15,status:"completed"},
-    {title:"Quiz: Machine Learning",           class:"7th Sem CSE-AI",date:"Apr 18, 2025",dur:30,qs:10,status:"upcoming"},
-  ];
+  const [tests, setTests] = useState([]);
+  const [show, setShow] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [viewResultsFor, setViewResultsFor] = useState(null);
+  const [submissions, setSubmissions] = useState([]);
+  const [gradingSubmission, setGradingSubmission] = useState(null);
+  const [grades, setGrades] = useState({});
+  
+  const [newTest, setNewTest] = useState({
+    title: "",
+    date: "",
+    duration: "",
+    semester: "",
+    branch: "",
+    questions: []
+  });
+
+  const [newQType, setNewQType] = useState("mcq");
+  const [newQText, setNewQText] = useState("");
+  const [newQOptions, setNewQOptions] = useState(["", "", "", ""]);
+  const [newQCorrect, setNewQCorrect] = useState(0);
+  const [newQMarks, setNewQMarks] = useState("");
+
+  const fetchTests = async () => {
+    try {
+      const token = localStorage.getItem("token");
+      const res = await fetch("http://localhost:5001/tests", {
+        headers: { "Authorization": `Bearer ${token}` }
+      });
+      const data = await res.json();
+      if (Array.isArray(data)) setTests(data);
+    } catch (error) {
+      console.error("Error fetching tests:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchTests();
+  }, []);
+
+  const handleAddQuestion = () => {
+    if (!newQText || !newQMarks) return alert("Enter question text and marks.");
+    if (newQType === "mcq" && newQOptions.some(o => !o.trim())) return alert("Enter all 4 options for MCQ.");
+    
+    setNewTest(p => ({
+      ...p,
+      questions: [...p.questions, { 
+        type: newQType, 
+        questionText: newQText,
+        options: newQType === "mcq" ? newQOptions : [],
+        correctOption: newQType === "mcq" ? newQCorrect : null,
+        marks: Number(newQMarks) 
+      }]
+    }));
+    
+    setNewQText("");
+    setNewQOptions(["", "", "", ""]);
+    setNewQCorrect(0);
+    setNewQMarks("");
+  };
+
+  const handleCreateTest = async () => {
+    if (!newTest.title || !newTest.date || !newTest.duration || !newTest.semester || !newTest.branch) {
+      return alert("Please fill all test details");
+    }
+    if (newTest.questions.length === 0) {
+      return alert("Please add at least one question");
+    }
+    
+    try {
+      const token = localStorage.getItem("token");
+      const res = await fetch("http://localhost:5001/tests", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
+        body: JSON.stringify(newTest)
+      });
+      if (res.ok) {
+        setShow(false);
+        setNewTest({ title: "", date: "", duration: "", semester: "", branch: "", questions: [] });
+        fetchTests();
+      } else {
+        const err = await res.json();
+        alert("Failed to create test: " + err.message);
+      }
+    } catch (error) {
+      alert("Error: " + error.message);
+    }
+  };
+
+  const handleDeleteTest = async (id) => {
+    if (!window.confirm("Are you sure you want to delete this test?")) return;
+    try {
+      const token = localStorage.getItem("token");
+      const res = await fetch(`http://localhost:5001/tests/${id}`, {
+        method: "DELETE",
+        headers: { "Authorization": `Bearer ${token}` }
+      });
+      if (res.ok) {
+        fetchTests();
+      }
+    } catch (error) {
+      alert("Delete failed");
+    }
+  };
+
+  const handleViewResults = async (t) => {
+    try {
+      const token = localStorage.getItem("token");
+      const res = await fetch(`http://localhost:5001/tests/${t._id}/submissions`, {
+        headers: { "Authorization": `Bearer ${token}` }
+      });
+      const data = await res.json();
+      setSubmissions(data.submissions || []);
+      setViewResultsFor(t);
+    } catch (err) {
+      alert("Failed to load results");
+    }
+  };
+
+  const submitGrades = async () => {
+    try {
+      const token = localStorage.getItem("token");
+      const res = await fetch(`http://localhost:5001/tests/submissions/${gradingSubmission._id}/grade`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
+        body: JSON.stringify({ grades })
+      });
+      if (res.ok) {
+        alert("Grades saved!");
+        setGradingSubmission(null);
+        handleViewResults(viewResultsFor);
+      }
+    } catch (err) {
+      alert("Failed to save grades");
+    }
+  };
+
+  if (gradingSubmission) {
+    return (
+      <div>
+        <SecHead title={`Grading: ${gradingSubmission.studentName}`} sub={`Test: ${viewResultsFor.title}`} />
+        <Card>
+          <div style={{ marginBottom: 16 }}>
+            <div style={{ fontSize:15, fontWeight:800, color:T.dark }}>Total Current Score: {gradingSubmission.totalScore} / {viewResultsFor.totalTestMarks}</div>
+            {!gradingSubmission.isGraded && <Tag color="amber">Needs Manual Grading</Tag>}
+          </div>
+          
+          <div style={{ display:"grid", gap:16 }}>
+            {gradingSubmission.answers.map((ans, idx) => {
+              const q = viewResultsFor.questions[idx];
+              return (
+                <div key={idx} style={{ padding: 16, border: `1px solid ${T.border}`, borderRadius: 8, background: T.bgCard }}>
+                  <div style={{ fontSize:14, fontWeight:700, color:T.dark, marginBottom:8 }}>Q{idx+1}. {q.questionText}</div>
+                  <div style={{ fontSize:12, fontWeight:800, color:T.violet, marginBottom:8 }}>Max Marks: {q.marks}</div>
+                  
+                  {q.type === 'mcq' ? (
+                    <div>
+                      <div style={{ fontSize: 13, color: ans.selectedOption === q.correctOption ? T.success : T.danger }}>
+                        Selected Option: {ans.selectedOption !== null && q.options[ans.selectedOption] ? q.options[ans.selectedOption] : "None"} 
+                        {ans.selectedOption === q.correctOption ? " ✓ (Correct)" : ` ✗ (Correct was: ${q.options[q.correctOption]})`}
+                      </div>
+                      <div style={{ fontSize: 13, fontWeight: 700, marginTop: 4 }}>Marks Awarded: {ans.marksAwarded}</div>
+                    </div>
+                  ) : (
+                    <div>
+                      <div style={{ fontSize: 13, color: T.dark, background: T.bg, padding: 12, borderRadius: 8, marginBottom: 8, whiteSpace: "pre-wrap" }}>
+                        {ans.textAnswer || "No answer provided."}
+                      </div>
+                      <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                        <span style={{ fontSize:13, fontWeight:600 }}>Assign Marks:</span>
+                        <input 
+                          type="number" 
+                          max={q.marks} 
+                          min={0}
+                          value={grades[idx] !== undefined ? grades[idx] : ans.marksAwarded}
+                          onChange={(e) => setGrades({...grades, [idx]: e.target.value})}
+                          style={{ width: 80, padding: 8, borderRadius: 6, border: `1px solid ${T.border}`, outline: "none" }}
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+          
+          <div style={{ display:"flex", gap:8, marginTop:24 }}>
+            <Btn v="primary" sz="md" onClick={submitGrades}>Save Grades</Btn>
+            <Btn v="ghost" sz="md" onClick={() => setGradingSubmission(null)}>Cancel</Btn>
+          </div>
+        </Card>
+      </div>
+    );
+  }
+
+  if (viewResultsFor) {
+    return (
+      <div>
+        <SecHead title={`Results: ${viewResultsFor.title}`} action={<Btn v="ghost" sz="sm" onClick={() => setViewResultsFor(null)}>← Back to Tests</Btn>} />
+        {submissions.length === 0 ? (
+          <Card style={{ textAlign:"center", padding:"40px 0", color:T.muted }}>No submissions yet.</Card>
+        ) : (
+          <div style={{ display:"grid", gap:10 }}>
+            {submissions.map((sub, i) => (
+              <Card key={i} style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+                <div>
+                  <div style={{ fontSize:15.5, fontWeight:800, color:T.dark }}>{sub.studentName}</div>
+                  <div style={{ fontSize:13, color:T.muted }}>Submitted: {new Date(sub.submittedAt).toLocaleString()}</div>
+                  <div style={{ fontSize:13, color:T.dark, marginTop:4 }}>Score: <b>{sub.totalScore} / {viewResultsFor.totalTestMarks}</b></div>
+                </div>
+                <div style={{ display:"flex", gap: 8, alignItems:"center" }}>
+                  <Tag color={sub.isGraded ? "mint" : "amber"}>{sub.isGraded ? "Graded" : "Needs Grading"}</Tag>
+                  <Btn v="primary" sz="sm" onClick={() => {
+                    setGradingSubmission(sub);
+                    const initialGrades = {};
+                    sub.answers.forEach((ans, i) => { if (viewResultsFor.questions[i].type === 'long_answer') initialGrades[i] = ans.marksAwarded });
+                    setGrades(initialGrades);
+                  }}>Review & Grade</Btn>
+                </div>
+              </Card>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div>
-      <SecHead title="Online Tests" sub="Create, schedule, and review exams" action={<Btn v="primary" sz="sm" onClick={()=>setShow(!show)}>+ Create Test</Btn>}/>
-      {show&&<Card style={{ marginBottom:14, borderLeft:`4px solid ${T.violet}` }}>
-        <div style={{ fontSize:15, fontWeight:800, color:T.dark, marginBottom:14 }}>Configure New Test</div>
-        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:10 }}>
-          <Inp label="Test Title" value="" onChange={()=>{}} placeholder="Test name"/>
-          <Inp label="Date & Time" type="datetime-local" value="" onChange={()=>{}}/>
-          <Inp label="Duration (mins)" type="number" value="" onChange={()=>{}} placeholder="60"/>
-        </div>
-        <div style={{ display:"flex", gap:8 }}><Btn v="primary" sz="sm" onClick={()=>setShow(false)}>Create Test</Btn><Btn v="ghost" sz="sm" onClick={()=>setShow(false)}>Cancel</Btn></div>
-      </Card>}
-      <div style={{ display:"grid", gap:10 }}>
-        {tests.map((t,i)=>(
-          <Card key={i}>
-            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start" }}>
+      <SecHead title="Online Tests" sub="Create, schedule, and review exams" action={<Btn v="primary" sz="sm" onClick={() => setShow(!show)}>+ Create Test</Btn>} />
+      {show && (
+        <Card style={{ marginBottom: 14, borderLeft: `4px solid ${T.violet}` }}>
+          <div style={{ fontSize:15, fontWeight:800, color:T.dark, marginBottom:14 }}>Configure New Test</div>
+          
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:10, marginBottom:14 }}>
+            <Inp label="Test Title" value={newTest.title} onChange={v => setNewTest({...newTest, title: v})} placeholder="e.g. Mid-Term AI" />
+            <Inp label="Date & Time" type="datetime-local" value={newTest.date} onChange={v => setNewTest({...newTest, date: v})} />
+            <Inp label="Duration (mins)" type="number" value={newTest.duration} onChange={v => setNewTest({...newTest, duration: v})} placeholder="60" />
+          </div>
+          
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:16 }}>
+            <Inp label="Semester" value={newTest.semester} onChange={v => setNewTest({...newTest, semester: v})} placeholder="e.g. 7th Sem" />
+            <Inp label="Branch" value={newTest.branch} onChange={v => setNewTest({...newTest, branch: v})} placeholder="e.g. CSE-AI" />
+          </div>
+
+          <div style={{ border: `1px solid ${T.border}`, borderRadius: 10, padding: 16, marginBottom: 16, background: T.bg }}>
+            <div style={{ fontSize:13.5, fontWeight:800, color:T.dark, marginBottom:10 }}>Add Questions</div>
+            
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 2fr 1fr", gap:10, marginBottom:12, alignItems:"end" }}>
               <div>
-                <div style={{ fontSize:15.5, fontWeight:800, color:T.dark, marginBottom:5 }}>{t.title}</div>
-                <div style={{ fontSize:13, color:T.muted }}>👥 {t.class} · 📅 {t.date} · ⏱ {t.dur} mins · ❓ {t.qs} questions</div>
+                <label style={{ display:"block", fontSize:12.5, fontWeight:700, color:T.dark, marginBottom:5 }}>Question Type</label>
+                <select value={newQType} onChange={e => setNewQType(e.target.value)} style={{ width:"100%", padding:"10px 14px", border:`1.5px solid ${T.border}`, borderRadius:10, fontSize:13.5, outline:"none" }}>
+                  <option value="mcq">Multiple Choice</option>
+                  <option value="long_answer">Long Answer</option>
+                </select>
               </div>
-              <Tag color={t.status==="completed"?"mint":"violet"}>{t.status}</Tag>
+              <div>
+                <Inp label="Question Text" value={newQText} onChange={v => setNewQText(v)} placeholder="e.g. What is a neural network?" />
+              </div>
+              <div>
+                <Inp label="Marks" type="number" value={newQMarks} onChange={v => setNewQMarks(v)} placeholder="e.g. 5" />
+              </div>
             </div>
-            <div style={{ display:"flex", gap:8, marginTop:12 }}>
-              {t.status==="completed"&&<Btn v="ghost" sz="sm">View Results</Btn>}
-              <Btn v="ghost" sz="sm">Preview</Btn><Btn v="primary" sz="sm">Manage</Btn>
-            </div>
-          </Card>
-        ))}
-      </div>
+
+            {newQType === "mcq" && (
+              <div style={{ background: "#fff", padding: 12, borderRadius: 8, border: `1px solid ${T.border}`, marginBottom: 12 }}>
+                <div style={{ fontSize:12.5, fontWeight:700, color:T.dark, marginBottom:8 }}>Options & Correct Answer</div>
+                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
+                  {[0,1,2,3].map(i => (
+                    <div key={i} style={{ display:"flex", alignItems:"center", gap:8 }}>
+                      <input type="radio" name="correctOpt" checked={newQCorrect === i} onChange={() => setNewQCorrect(i)} style={{ cursor:"pointer" }} />
+                      <div style={{ flex:1 }}><Inp value={newQOptions[i]} onChange={v => { const opts=[...newQOptions]; opts[i]=v; setNewQOptions(opts); }} placeholder={`Option ${i+1}`} /></div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            
+            <Btn v="mint" sz="sm" onClick={handleAddQuestion}>+ Add Question</Btn>
+
+            {newTest.questions.length > 0 && (
+              <div style={{ marginTop:16 }}>
+                <div style={{ fontSize:12.5, fontWeight:700, color:T.muted, marginBottom:4 }}>Added Questions ({newTest.questions.length}):</div>
+                {newTest.questions.map((q, idx) => (
+                  <div key={idx} style={{ background:T.bgCard, padding:"12px 14px", borderRadius:8, border:`1px solid ${T.border}`, marginBottom:8 }}>
+                    <div style={{ display:"flex", justifyContent:"space-between", marginBottom:4 }}>
+                      <span style={{ fontSize:13.5, fontWeight:700, color:T.dark }}>Q{idx+1}. {q.questionText}</span>
+                      <span style={{ fontSize:12, fontWeight:800, color:T.violet, background:T.violet+"1A", padding:"2px 8px", borderRadius:10 }}>{q.marks} Marks</span>
+                    </div>
+                    {q.type === 'mcq' ? (
+                      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:6, marginTop:8 }}>
+                        {q.options.map((o, i) => (
+                          <div key={i} style={{ fontSize:12.5, color: i === q.correctOption ? T.success : T.muted, fontWeight: i === q.correctOption ? 700 : 400 }}>
+                            {i === q.correctOption ? '✓ ' : '• '}{o}
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div style={{ fontSize:12, color:T.muted, marginTop:4, fontStyle:"italic" }}>Long Answer format</div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div style={{ display:"flex", gap:8 }}>
+            <Btn v="primary" sz="sm" onClick={handleCreateTest}>Create Test</Btn>
+            <Btn v="ghost" sz="sm" onClick={() => setShow(false)}>Cancel</Btn>
+          </div>
+        </Card>
+      )}
+      
+      {loading ? (
+        <div style={{ textAlign:"center", padding:"40px 0", color:T.muted }}>Loading tests...</div>
+      ) : tests.length === 0 ? (
+        <Card style={{ textAlign:"center", padding:"40px 0", color:T.muted }}>No tests created yet.</Card>
+      ) : (
+        <div style={{ display:"grid", gap:10 }}>
+          {tests.map((t) => {
+            const isUpcoming = new Date(t.date) > new Date();
+            const status = isUpcoming ? "upcoming" : "completed";
+            return (
+              <Card key={t._id}>
+                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start" }}>
+                  <div>
+                    <div style={{ fontSize:15.5, fontWeight:800, color:T.dark, marginBottom:5 }}>{t.title}</div>
+                    <div style={{ fontSize:13, color:T.muted }}>
+                      👥 {t.semester} - {t.branch} · 📅 {new Date(t.date).toLocaleString()} · ⏱ {t.duration} mins
+                    </div>
+                    <div style={{ fontSize:12.5, color:T.violet, fontWeight:800, marginTop:4 }}>Total Marks: {t.totalTestMarks}</div>
+                  </div>
+                  <Tag color={status === "completed" ? "mint" : "violet"}>{status}</Tag>
+                </div>
+                <div style={{ display:"flex", gap:8, marginTop:12 }}>
+                  <Btn v="ghost" sz="sm" onClick={() => handleViewResults(t)}>View Results</Btn>
+                  <Btn v="ghost" sz="sm" onClick={() => handleDeleteTest(t._id)}><span style={{ color:T.danger }}>Delete</span></Btn>
+                </div>
+              </Card>
+            )
+          })}
+        </div>
+      )}
     </div>
   );
 }
@@ -2848,36 +3283,92 @@ function StudentAttendance() {
    STUDENT TESTS
 ══════════════════════════════════════════════════════ */
 function StudentTests() {
+  const [tests, setTests] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [active,setActive]=useState(null); const [ans,setAns]=useState({}); const [done,setDone]=useState(false);
-  const qs=[
-    {id:1,q:"Which activation function is used in output layer for binary classification?",opts:["ReLU","Sigmoid","Tanh","Softmax"],correct:1},
-    {id:2,q:"Which algorithm trains neural networks through gradient descent?",opts:["Backpropagation","Bubble Sort","Binary Search","DFS"],correct:0},
-    {id:3,q:"What does CNN stand for in deep learning?",opts:["Computed Neural Net","Convolutional Neural Network","Connected Net","Circular NN"],correct:1},
-    {id:4,q:"Which layer is always the last in a neural network?",opts:["Hidden Layer","Input Layer","Output Layer","Dropout Layer"],correct:2},
-  ];
+  const [submitLoading, setSubmitLoading]=useState(false);
+  const [activeScore, setActiveScore] = useState(null);
+
+  const fetchTests = () => {
+    setLoading(true);
+    fetch("http://localhost:5001/tests", {
+      headers: { "Authorization": `Bearer ${localStorage.getItem("token")}` }
+    })
+      .then(res => res.json())
+      .then(data => {
+        if (Array.isArray(data)) setTests(data);
+      })
+      .catch(console.error)
+      .finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    fetchTests();
+  }, []);
+
+  const handleSubmitTest = async () => {
+    const finalAnswers = active.questions.map((_, i) => ans[i]);
+    setSubmitLoading(true);
+    try {
+      const res = await fetch(`http://localhost:5001/tests/${active._id}/submit`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${localStorage.getItem("token")}` },
+        body: JSON.stringify({ answers: finalAnswers })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setActiveScore(data);
+        setDone(true);
+        fetchTests(); // Refresh test status
+      } else {
+        const err = await res.json();
+        alert(err.message || "Submission failed");
+      }
+    } catch (err) {
+      alert("Error: " + err.message);
+    } finally {
+      setSubmitLoading(false);
+    }
+  };
 
   if(active&&!done){
+    const qs = active.questions || [];
     return (
       <div>
-        <SecHead title={`🧪 ${active.title}`} action={<Tag color="coral">⏱ 20:00 remaining</Tag>}/>
+        <SecHead title={`🧪 ${active.title}`} action={<Tag color="coral">⏱ {active.duration} mins</Tag>}/>
         <Card>
           <div style={{ marginBottom:18 }}>
             <ProgressBar value={Object.keys(ans).length} max={qs.length} color={T.violet} height={8}/>
             <div style={{ fontSize:12.5, color:T.muted, marginTop:6 }}>{Object.keys(ans).length} of {qs.length} answered</div>
           </div>
           {qs.map((q,i)=>(
-            <div key={q.id} style={{ marginBottom:24, paddingBottom:24, borderBottom:i<qs.length-1?`1px solid ${T.border}`:"none" }}>
-              <div style={{ fontSize:15, fontWeight:700, color:T.dark, marginBottom:13 }}>Q{i+1}. {q.q}</div>
-              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
-                {q.opts.map((o,j)=>(
-                  <button key={j} onClick={()=>setAns(p=>({...p,[q.id]:j}))} style={{ padding:"11px 14px", border:`2px solid ${ans[q.id]===j?T.violet:T.border}`, borderRadius:10, background:ans[q.id]===j?T.violet+"14":T.bgCard, color:ans[q.id]===j?T.violetD:T.dark, cursor:"pointer", textAlign:"left", fontSize:13.5, fontFamily:"inherit", fontWeight:ans[q.id]===j?700:400 }}>{String.fromCharCode(65+j)}. {o}</button>
-                ))}
+            <div key={i} style={{ marginBottom:24, paddingBottom:24, borderBottom:i<qs.length-1?`1px solid ${T.border}`:"none" }}>
+              <div style={{ display:"flex", justifyContent:"space-between" }}>
+                <div style={{ fontSize:15, fontWeight:700, color:T.dark, marginBottom:13 }}>Q{i+1}. {q.questionText}</div>
+                <div style={{ fontSize:12, fontWeight:800, color:T.violet }}>{q.marks} Marks</div>
               </div>
+              {q.type === 'mcq' ? (
+                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
+                  {q.options.map((o,j)=>(
+                    <button key={j} onClick={()=>setAns(p=>({...p,[i]:j}))} style={{ padding:"11px 14px", border:`2px solid ${ans[i]===j?T.violet:T.border}`, borderRadius:10, background:ans[i]===j?T.violet+"14":T.bgCard, color:ans[i]===j?T.violetD:T.dark, cursor:"pointer", textAlign:"left", fontSize:13.5, fontFamily:"inherit", fontWeight:ans[i]===j?700:400 }}>{String.fromCharCode(65+j)}. {o}</button>
+                  ))}
+                </div>
+              ) : (
+                <textarea 
+                  rows={4} 
+                  value={ans[i] || ""} 
+                  onChange={(e) => setAns(p=>({...p,[i]:e.target.value}))}
+                  placeholder="Type your answer here..."
+                  style={{ width:"100%", padding:"12px", border:`1.5px solid ${T.border}`, borderRadius:10, fontSize:13.5, fontFamily:"inherit", outline:"none" }}
+                />
+              )}
             </div>
           ))}
           <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
             <Btn v="ghost" onClick={()=>{setActive(null);setAns({});}}>← Exit</Btn>
-            <Btn v="primary" sz="lg" onClick={()=>setDone(true)} disabled={Object.keys(ans).length<qs.length}>Submit Test →</Btn>
+            <Btn v="primary" sz="lg" onClick={handleSubmitTest} disabled={Object.keys(ans).length<qs.length || submitLoading}>
+              {submitLoading ? "Submitting..." : "Submit Test →"}
+            </Btn>
           </div>
         </Card>
       </div>
@@ -2885,46 +3376,64 @@ function StudentTests() {
   }
 
   if(done){
-    const score=qs.filter(q=>ans[q.id]===q.correct).length; const pct=Math.round(score/qs.length*100);
+    const qs = active.questions || [];
+    const totalMcqMarks = qs.filter(q => q.type === 'mcq').reduce((s, q) => s + q.marks, 0);
+    const score = activeScore ? activeScore.totalScore : 0;
+    const hasLongAnswer = qs.some(q => q.type !== 'mcq');
+    
+    // pct calculation is tricky if not fully graded, we show based on MCQs if it's not fully graded
+    const pct = totalMcqMarks > 0 ? Math.round(score / active.totalTestMarks * 100) : 100;
+    
     return (
       <div>
         <SecHead title="Test Result"/>
         <Card style={{ textAlign:"center", padding:"60px 32px" }}>
           <div style={{ width:100, height:100, borderRadius:"50%", background:pct>=75?GR.mint:GR.coral, display:"flex", alignItems:"center", justifyContent:"center", fontSize:46, margin:"0 auto 24px" }}>{pct>=75?"🏆":"📚"}</div>
-          <div style={{ fontSize:48, fontWeight:800, color:T.dark, marginBottom:8 }}>{score}/{qs.length}</div>
-          <div style={{ fontSize:20, color:T.muted, marginBottom:20 }}>{pct}% Score</div>
-          <Tag color={pct>=60?"mint":"coral"}>{pct>=60?"Passed — Well Done!":"Needs Improvement"}</Tag>
-          <div style={{ marginTop:28 }}><Btn v="ghost" onClick={()=>{setActive(null);setDone(false);setAns({});}}>← Back to Tests</Btn></div>
+          <div style={{ fontSize:20, color:T.muted, marginBottom:8 }}>{hasLongAnswer && (!activeScore || !activeScore.isGraded) ? "Auto-Graded MCQ Score" : "Total Score"}</div>
+          <div style={{ fontSize:48, fontWeight:800, color:T.dark, marginBottom:8 }}>{score}/{active.totalTestMarks}</div>
+          {hasLongAnswer && (!activeScore || !activeScore.isGraded) && <div style={{ fontSize:15, color:T.muted, marginBottom:20 }}>Long answers require manual grading. Final score will be updated.</div>}
+          <Tag color={pct>=60?"mint":"coral"}>{pct>=60?"Good Effort!":"Needs Review"}</Tag>
+          <div style={{ marginTop:28 }}><Btn v="ghost" onClick={()=>{setActive(null);setDone(false);setAns({});setActiveScore(null);}}>← Back to Tests</Btn></div>
         </Card>
       </div>
     );
   }
 
-  const tests=[
-    {title:"AI & Neural Networks Quiz",  sub:"AI",   qs:4,  dur:20, status:"available"},
-    {title:"Data Structures Mid-Term",   sub:"DSA",  qs:30, dur:90, status:"upcoming",  date:"Apr 12"},
-    {title:"DBMS Unit Test — Completed", sub:"DBMS", qs:15, dur:45, status:"completed", score:"78%"},
-  ];
   return (
     <div>
       <SecHead title="Online Tests & Exams" sub="Practice quizzes, unit tests, and major exams"/>
-      <div style={{ display:"grid", gap:11 }}>
-        {tests.map((t,i)=>(
-          <Card key={i} style={{ borderLeft:`4px solid ${t.status==="available"?T.mint:t.status==="upcoming"?T.amber:T.muted}` }}>
-            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-              <div>
-                <div style={{ fontSize:15.5, fontWeight:800, color:T.dark, marginBottom:5 }}>{t.title}</div>
-                <div style={{ fontSize:13, color:T.muted }}>📚 {t.sub} · ❓ {t.qs} questions · ⏱ {t.dur} mins{t.date?` · 📅 ${t.date}`:""}</div>
+      {loading ? (
+        <div style={{ textAlign:"center", padding:"40px 0", color:T.muted }}>Loading tests...</div>
+      ) : tests.length === 0 ? (
+        <Card style={{ textAlign:"center", padding:"40px 0", color:T.muted }}>No tests scheduled for your branch and semester.</Card>
+      ) : (
+        <div style={{ display:"grid", gap:11 }}>
+          {tests.map((t)=>(
+            <Card key={t._id} style={{ borderLeft:`4px solid ${t.isSubmitted?T.mint:new Date(t.date)>new Date()?T.amber:T.violet}` }}>
+              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+                <div>
+                  <div style={{ fontSize:15.5, fontWeight:800, color:T.dark, marginBottom:5 }}>{t.title}</div>
+                  <div style={{ fontSize:13, color:T.muted }}>📚 {t.branch} · {t.semester} Semester · ⏱ {t.duration} mins · 📅 {new Date(t.date).toLocaleString()}</div>
+                  <div style={{ fontSize:12.5, color:T.violet, fontWeight:800, marginTop:4 }}>Total Marks: {t.totalTestMarks}</div>
+                </div>
+                <div style={{ display:"flex", gap:8, alignItems:"center" }}>
+                  {t.isSubmitted ? (
+                    <>
+                      <Tag color="mint">Submitted</Tag>
+                      <Btn v="ghost" sz="sm" onClick={() => { setActive(t); setDone(true); setActiveScore({ totalScore: t.score, isGraded: t.isGraded }); }}>View Result</Btn>
+                    </>
+                  ) : (
+                    <>
+                      <Tag color={new Date(t.date)>new Date()?"amber":"violet"}>{new Date(t.date)>new Date()?"upcoming":"available"}</Tag>
+                      {new Date(t.date)<=new Date()&&<Btn v="primary" sz="sm" onClick={()=>setActive(t)}>Start →</Btn>}
+                    </>
+                  )}
+                </div>
               </div>
-              <div style={{ display:"flex", gap:8, alignItems:"center" }}>
-                {t.score&&<Tag color="mint">{t.score}</Tag>}
-                <Tag color={t.status==="available"?"mint":t.status==="upcoming"?"amber":"gray"}>{t.status}</Tag>
-                {t.status==="available"&&<Btn v="primary" sz="sm" onClick={()=>setActive(t)}>Start →</Btn>}
-              </div>
-            </div>
-          </Card>
-        ))}
-      </div>
+            </Card>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

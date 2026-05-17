@@ -176,9 +176,23 @@ export function StudentAttendance() {
 
 /* ── Student Tests ────────────────────────────────────────────────────────── */
 export function StudentTests() {
+  const [tests, setTests] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [active, setActive] = useState(null);
   const [ans,    setAns]    = useState({});
   const [done,   setDone]   = useState(false);
+
+  useEffect(() => {
+    fetch("http://localhost:5001/tests", {
+      headers: { "Authorization": `Bearer ${localStorage.getItem("token")}` }
+    })
+      .then(res => res.json())
+      .then(data => {
+        if (Array.isArray(data)) setTests(data);
+      })
+      .catch(console.error)
+      .finally(() => setLoading(false));
+  }, []);
 
   const qs = [
     { id:1, q:"Which activation function is used in output layer for binary classification?", opts:["ReLU","Sigmoid","Tanh","Softmax"],          correct:1 },
@@ -190,7 +204,7 @@ export function StudentTests() {
   if (active && !done) {
     return (
       <div>
-        <SectionHeader title={`🧪 ${active.title}`} action={<Tag color="coral">⏱ 20:00 remaining</Tag>} />
+        <SectionHeader title={`🧪 ${active.title}`} action={<Tag color="coral">⏱ {active.duration} mins</Tag>} />
         <Card>
           <div className="mb-4.5">
             <ProgressBar value={Object.keys(ans).length} max={qs.length} colorClass="bg-[#6C4EF5]" height="h-2" />
@@ -236,31 +250,36 @@ export function StudentTests() {
     );
   }
 
-  const tests = [
-    { title:"AI & Neural Networks Quiz",  sub:"AI",   qs:4,  dur:20, status:"available" },
-    { title:"Data Structures Mid-Term",   sub:"DSA",  qs:30, dur:90, status:"upcoming", date:"Apr 12" },
-    { title:"DBMS Unit Test — Completed", sub:"DBMS", qs:15, dur:45, status:"completed", score:"78%" },
-  ];
   return (
     <div>
       <SectionHeader title="Online Tests & Exams" sub="Practice quizzes, unit tests, and major exams" />
-      <div className="flex flex-col gap-3">
-        {tests.map((t,i) => (
-          <Card key={i} className={`border-l-4 ${t.status==="available"?"border-l-[#00C9A7]":t.status==="upcoming"?"border-l-[#F5A623]":"border-l-[#B8B5D4]"}`}>
-            <div className="flex justify-between items-center">
-              <div>
-                <div className="text-[15.5px] font-extrabold text-[#1A1540] mb-1.5">{t.title}</div>
-                <div className="text-[13px] text-[#7B789E]">📚 {t.sub} · ❓ {t.qs} questions · ⏱ {t.dur} mins{t.date?` · 📅 ${t.date}`:""}</div>
-              </div>
-              <div className="flex gap-2 items-center">
-                {t.score && <Tag color="mint">{t.score}</Tag>}
-                <Tag color={t.status==="available"?"mint":t.status==="upcoming"?"amber":"gray"}>{t.status}</Tag>
-                {t.status==="available" && <Button variant="primary" size="sm" onClick={() => setActive(t)}>Start →</Button>}
-              </div>
-            </div>
-          </Card>
-        ))}
-      </div>
+      {loading ? (
+        <div className="text-center py-10 text-[#7B789E]">Loading tests...</div>
+      ) : tests.length === 0 ? (
+        <Card className="text-center py-10 text-[#7B789E]">No tests scheduled for your branch and semester.</Card>
+      ) : (
+        <div className="flex flex-col gap-3">
+          {tests.map((t) => {
+            const isUpcoming = new Date(t.date) > new Date();
+            const status = isUpcoming ? "upcoming" : "available";
+            return (
+              <Card key={t._id} className={`border-l-4 ${status==="available"?"border-l-[#00C9A7]":status==="upcoming"?"border-l-[#F5A623]":"border-l-[#B8B5D4]"}`}>
+                <div className="flex justify-between items-center">
+                  <div>
+                    <div className="text-[15.5px] font-extrabold text-[#1A1540] mb-1.5">{t.title}</div>
+                    <div className="text-[13px] text-[#7B789E]">📚 {t.branch} · {t.semester} Semester · ⏱ {t.duration} mins · 📅 {new Date(t.date).toLocaleString()}</div>
+                    <div className="text-[12.5px] text-[#6C4EF5] font-bold mt-1">Total Marks: {t.totalTestMarks}</div>
+                  </div>
+                  <div className="flex gap-2 items-center">
+                    <Tag color={status==="available"?"mint":status==="upcoming"?"amber":"gray"}>{status}</Tag>
+                    {status==="available" && <Button variant="primary" size="sm" onClick={() => setActive(t)}>Start →</Button>}
+                  </div>
+                </div>
+              </Card>
+            )
+          })}
+        </div>
+      )}
     </div>
   );
 }

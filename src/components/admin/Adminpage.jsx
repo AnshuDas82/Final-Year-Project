@@ -80,6 +80,9 @@ export function AdminStudents() {
   const [branchFilter, setBranchFilter] = useState("");
   const [students, setStudents] = useState([]);
   const [selectedStudent, setSelectedStudent] = useState(null);
+  const [editStudent, setEditStudent] = useState(null);
+  const [editForm, setEditForm] = useState({});
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     fetch("http://localhost:5001/students", {
@@ -96,6 +99,31 @@ export function AdminStudents() {
     const matchBranch = branchFilter ? s.branch === branchFilter : true;
     return matchQ && matchSem && matchBranch;
   });
+
+  const openEdit = (s) => {
+    setEditStudent(s);
+    setEditForm({ name: s.name||"", rollNo: s.rollNo||"", branch: s.branch||"", semester: s.semester||"", email: s.email||"", phone: s.phone||"", dob: s.dob||"", address: s.address||"", gpa: s.gpa||"", attendance: s.attendance||"" });
+  };
+
+  const handleEditSave = async (e) => {
+    e.preventDefault();
+    setSaving(true);
+    try {
+      const res = await fetch(`http://localhost:5001/students/${editStudent._id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${localStorage.getItem("token")}` },
+        body: JSON.stringify(editForm)
+      });
+      const updated = await res.json();
+      if (res.ok) {
+        setStudents(prev => prev.map(s => s._id === updated._id ? updated : s));
+        setEditStudent(null);
+      } else {
+        alert(updated.message || "Update failed");
+      }
+    } catch (err) { console.error(err); alert("Network error"); }
+    finally { setSaving(false); }
+  };
 
   return (
     <div>
@@ -152,6 +180,36 @@ export function AdminStudents() {
         </div>
       )}
 
+      {/* ── Edit Student Modal ── */}
+      {editStudent && (
+        <div style={{ position:"fixed", top:0, left:0, right:0, bottom:0, background:"rgba(0,0,0,0.55)", zIndex:1100, display:"flex", alignItems:"center", justifyContent:"center" }}>
+          <Card style={{ width:"92%", maxWidth:620, maxHeight:"92vh", overflowY:"auto" }}>
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:18 }}>
+              <div style={{ fontSize:17, fontWeight:800, color:"#1A1540" }}>✏️ Edit Student</div>
+              <Button variant="ghost" size="sm" onClick={() => setEditStudent(null)}>✕ Close</Button>
+            </div>
+            <form onSubmit={handleEditSave}>
+              <div className="grid grid-cols-2 gap-3 mb-3">
+                <Input label="Student Name" value={editForm.name} onChange={v => setEditForm({...editForm, name:v})} />
+                <Input label="Roll No" value={editForm.rollNo} onChange={v => setEditForm({...editForm, rollNo:v})} />
+                <Input label="Branch" value={editForm.branch} onChange={v => setEditForm({...editForm, branch:v})} />
+                <Input label="Semester" value={editForm.semester} onChange={v => setEditForm({...editForm, semester:v})} />
+                <Input label="Email" value={editForm.email} onChange={v => setEditForm({...editForm, email:v})} />
+                <Input label="Phone" value={editForm.phone} onChange={v => setEditForm({...editForm, phone:v})} />
+                <Input label="DOB" type="date" value={editForm.dob} onChange={v => setEditForm({...editForm, dob:v})} />
+                <Input label="Address" value={editForm.address} onChange={v => setEditForm({...editForm, address:v})} />
+                <Input label="GPA" type="number" value={editForm.gpa} onChange={v => setEditForm({...editForm, gpa:v})} />
+                <Input label="Attendance (%)" type="number" value={editForm.attendance} onChange={v => setEditForm({...editForm, attendance:v})} />
+              </div>
+              <div style={{ display:"flex", gap:8 }}>
+                <Button type="submit" variant="primary" size="md" disabled={saving}>{saving ? "Saving…" : "Save Changes"}</Button>
+                <Button type="button" variant="ghost" size="sm" onClick={() => setEditStudent(null)}>Cancel</Button>
+              </div>
+            </form>
+          </Card>
+        </div>
+      )}
+
       <AddStudentForm />
       <SectionHeader
         title="Student Management"
@@ -202,7 +260,10 @@ export function AdminStudents() {
                 <td className="px-3.5 py-3 text-[13px]">{s.attendance}%</td>
                 <td className="px-3.5 py-3 font-bold text-[13px]">{s.gpa}</td>
                 <td className="px-3.5 py-3"><Tag color="mint">Active</Tag></td>
-                <td className="px-3.5 py-3"><Button variant="ghost" size="sm" onClick={() => setSelectedStudent(s)}>View →</Button></td>
+                <td className="px-3.5 py-3" style={{ display:"flex", gap:6, alignItems:"center" }}>
+                  <Button variant="ghost" size="sm" onClick={() => setSelectedStudent(s)}>View →</Button>
+                  <Button variant="primary" size="sm" onClick={() => openEdit(s)}>✏️ Edit</Button>
+                </td>
               </tr>
             ))}
             {list.length === 0 && (
